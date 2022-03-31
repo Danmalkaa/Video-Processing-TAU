@@ -108,22 +108,56 @@ def lucas_kanade_step(I1: np.ndarray,
     """INSERT YOUR CODE HERE.
     Calculate du and dv correctly.
     """
+    def _column_stack(matrix):
+        return np.transpose(np.transpose(matrix).reshape([1, len(matrix) * len(matrix[0])]))
+
+    def build_windowed_B(Ix, Iy, i, j, window_size=5):
+        half_window = window_size // 2
+        temp_Ix_cs = _column_stack(Ix[max(0, i - half_window):min(i + half_window + 1, len(Ix)),
+                                   max(0, j - half_window):min(j + half_window + 1, len(Ix[0]))])
+        temp_Iy_cs = _column_stack(Iy[max(0, i - half_window):min(i + half_window + 1, len(Iy)),
+                                   max(0, j - half_window):min(j + half_window + 1, len(Iy[0]))])
+        B = np.column_stack((temp_Ix_cs, temp_Iy_cs))
+        return B
+
+    def build_windowed_it(It, i, j, window_size):
+        half_window = window_size // 2
+        return _column_stack(It[max(0, i - half_window):min(i + half_window + 1, len(It)),
+                             max(0, j - half_window):min(j + half_window + 1, len(It[0]))])
+    def get_derivatives(I2):
+        deriv_X_filter = np.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]])
+        deriv_Y_filter = deriv_X_filter.copy().transpose()
+        Ix = signal.convolve2d(I2, X_DERIVATIVE_FILTER, mode='same',boundary='symm')
+        Iy = signal.convolve2d(I2, Y_DERIVATIVE_FILTER, mode='same',boundary='symm')
+        return Ix, Iy
+
+    def calc_pixel_delta_p(It, Ix, Iy, i, j, window_size=5):
+        B_windowed = build_windowed_B(Ix, Iy, i, j, window_size)
+        It_cs = build_windowed_it(It, i, j, window_size)
+        try:
+            B_traspose_B = np.matmul(np.transpose(B_windowed), B_windowed)
+            delta_p = -np.matmul(np.matmul(np.linalg.inv(B_traspose_B), np.transpose(B_windowed)), It_cs)
+        except np.linalg.LinAlgError:
+            return np.zeros((2, 1))
+        return delta_p
+
     du = np.zeros(I1.shape)
     dv = np.zeros(I1.shape)
     Ix = signal.convolve2d(I2,X_DERIVATIVE_FILTER,mode='same',boundary='symm')
     Iy = signal.convolve2d(I2,Y_DERIVATIVE_FILTER,mode='same',boundary='symm')
-    It = I2 - I1
+    It = I2.astype('int16') - I1.astype('int16') # need to cast to int, as the images are unsigned int8
     border_size = window_size // 2
     for i in range(border_size, len(I2) - border_size):
         for j in range(border_size, len(I2[0]) - border_size):
-            A_1 = Ix[i-border_size:i+border_size, j-border_size: j+border_size].flatten().transpose()  # Ix_windowed_cols : Ix[p1..pk]^T
-            A_2 = Iy[i-border_size:i+border_size, j-border_size: j+border_size].flatten().transpose()  # Iy_windowed_cols : Iy[p1..pk]^T
+            A_1 = Ix[i-border_size:i+border_size+1, j-border_size: j+border_size+1].flatten().transpose()  # Ix_windowed_cols : Ix[p1..pk]^T
+            A_2 = Iy[i-border_size:i+border_size+1, j-border_size: j+border_size+1].flatten().transpose()  # Iy_windowed_cols : Iy[p1..pk]^T
             A = np.column_stack((A_1, A_2))  # [Ix_cs, Iy_cs]
-            b = -It[i-border_size:i+border_size, j-border_size: j+border_size].flatten().transpose() # -It_windowed_cols : -It[p1..pk]^T
+            b = -It[i-border_size:i+border_size+1, j-border_size: j+border_size+1].flatten().transpose() # -It_windowed_cols : -It[p1..pk]^T
             At_A = np.matmul(A.transpose(), A)  # A^T * A
             At_b = np.matmul(A.transpose(), b)  # A^T * A
             try:
-                du[i][j],dv[i][j] = np.linalg.lstsq(At_A, At_b)[0]
+                # delta_p = calc_pixel_delta_p(It, Ix, Iy, i, j, window_size)
+                du[i][j],dv[i][j] = np.linalg.lstsq(At_A, At_b, rcond=-1)[0]
             except np.linalg.LinAlgError:
                 du[i][j], dv[i][j] = 0,0
             #
@@ -132,6 +166,20 @@ def lucas_kanade_step(I1: np.ndarray,
             #     break
             # du[i][j] += delta_p[0][0]
             # dv[i][j] += delta_p[1][0]
+
+
+
+    # du = np.zeros(I2.shape)
+    # dv = np.zeros(I2.shape)
+    # Ix, Iy = get_derivatives(I2)
+    #
+    # for i in range(border_size, len(I2) - border_size):
+    #     for j in range(border_size, len(I2[0]) - border_size):
+    #         delta_p = calc_pixel_delta_p(It, Ix, Iy, i, j, window_size)
+    #         if np.max(np.abs(delta_p)) == 0:
+    #             break
+    #         du[i][j] += delta_p[0][0]
+    #         dv[i][j] += delta_p[1][0]
     return du, dv
 
 
@@ -187,16 +235,42 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     #         values.append(image[i][j])
     #         u_1.append(j + u[i][j])
     #         v_1.append(i + v[i][j])
-    x,y = image.shape
-    x, y = np.arange(x), np.arange(y)
-    xx, yy = np.meshgrid(x,y)
-    image_flat = image.flatten()
-    u_new += xx.transpose()
-    v_new += yy.transpose()
-    u_new, v_new = u_new.flatten(), v_new.flatten()
-    bilinear_result = griddata((xx.flatten(), yy.flatten()), image_flat, (u_new.flatten(), v_new.flatten()), method='linear', fill_value=np.nan)
-    image_warp = bilinear_result.reshape(image.shape)
-    image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
+    # x,y = image.shape
+    # x, y = np.arange(x), np.arange(y)
+    # xx, yy = np.meshgrid(x,y)
+    # image_flat = image.flatten()
+    # u_new += xx.transpose()
+    # v_new += yy.transpose()
+    # u_new, v_new = u_new.flatten(), v_new.flatten()
+    # bilinear_result = griddata((xx.flatten(), yy.flatten()), image_flat, (u_new.flatten(), v_new.flatten()), method='linear', fill_value=np.nan)
+    # image_warp = bilinear_result.reshape(image.shape)
+    # image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
+    x_1 = []
+    y_1 = []
+    u_1 = []
+    v_1 = []
+    values = []
+    new_image = np.zeros(image.shape)
+    for i in range(image.shape[0]):
+        for j in range(image.shape[1]):
+            x_1.append(j)
+            y_1.append(i)
+            values.append(image[i][j])
+            u_1.append(j + u[i][j])
+            v_1.append(i + v[i][j])
+    bilinear_result = griddata((x_1, y_1), values, (u_1, v_1), method='linear')
+    new_image = bilinear_result.reshape(image.shape)
+    # for index, value in enumerate(bilinear_result):
+    #     i = index // image.shape[1]
+    #     j = index % image.shape[1]
+    #     new_image[i][j] = value
+
+    # WHEN PIXELS ARE GONE, THEY RECEIVE NAN, so we put there their original value
+    gone_pixels = np.argwhere(np.isnan(new_image))
+    if len(gone_pixels) > 0:
+        for pixel_coords in gone_pixels:
+            new_image[pixel_coords[0]][pixel_coords[1]] = image[pixel_coords[0]][pixel_coords[1]]
+    image_warp = new_image
     return image_warp
 
 
