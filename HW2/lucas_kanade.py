@@ -6,8 +6,8 @@ from scipy.interpolate import griddata
 
 
 # FILL IN YOUR ID
-ID1 = 123456789
-ID2 = 987654321
+ID1 = 304773591
+ID2 = 313325938
 
 
 PYRAMID_FILTER = 1.0 / 256 * np.array([[1, 4, 6, 4, 1],
@@ -64,7 +64,8 @@ def build_pyramid(image: np.ndarray, num_levels: int) -> list[np.ndarray]:
     We use a slightly different decimation process from this function.
     """
     pyramid = [image.copy()]
-    """INSERT YOUR CODE HERE."""
+    """INSERT YOUR CODE HERE."""  # TODO: Check it works with the list comprehension
+    pyramid += [signal.convolve2d(PYRAMID_FILTER, pyramid[i], mode='same', boundary='symm')[::2] for i in range(num_levels)]
     return pyramid
 
 
@@ -109,6 +110,28 @@ def lucas_kanade_step(I1: np.ndarray,
     """
     du = np.zeros(I1.shape)
     dv = np.zeros(I1.shape)
+    Ix = signal.convolve2d(I2,X_DERIVATIVE_FILTER,mode='same',boundary='symm')
+    Iy = signal.convolve2d(I2,Y_DERIVATIVE_FILTER,mode='same',boundary='symm')
+    It = I2 - I1
+    border_size = window_size // 2
+    for i in range(border_size, len(I2) - border_size):
+        for j in range(border_size, len(I2[0]) - border_size):
+            A_1 = Ix[i-border_size:i+border_size, j-border_size: j+border_size].flatten().transpose()  # Ix_windowed_cols : Ix[p1..pk]^T
+            A_2 = Iy[i-border_size:i+border_size, j-border_size: j+border_size].flatten().transpose()  # Iy_windowed_cols : Iy[p1..pk]^T
+            A = np.column_stack((A_1, A_2))  # [Ix_cs, Iy_cs]
+            b = -It[i-border_size:i+border_size, j-border_size: j+border_size].flatten().transpose() # -It_windowed_cols : -It[p1..pk]^T
+            At_A = np.matmul(A.transpose(), A)  # A^T * A
+            At_b = np.matmul(A.transpose(), b)  # A^T * A
+            try:
+                du[i][j],dv[i][j] = np.linalg.lstsq(At_A, At_b)[0]
+            except np.linalg.LinAlgError:
+                du[i][j], dv[i][j] = 0,0
+            #
+            # delta_p = calc_pixel_delta_p(It, Ix, Iy, i, j, window_size)
+            # if np.max(np.abs(delta_p)) == 0:
+            #     break
+            # du[i][j] += delta_p[0][0]
+            # dv[i][j] += delta_p[1][0]
     return du, dv
 
 
@@ -145,6 +168,35 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     """INSERT YOUR CODE HERE.
     Replace image_warp with something else.
     """
+    uv_list = [u,v]
+    for i, mat in enumerate([u,v]):
+        if image.shape != mat.shape:
+            factor = image.shape[1] / mat.shape[1]
+            uv_list[i] = cv2.resize(mat, image.T.shape) * factor
+    u_new, v_new = uv_list[0], uv_list[1]
+    # x_1 = []
+    # y_1 = []
+    # u_1 = []
+    # v_1 = []
+    # values = []
+    # new_image = np.zeros(image.shape)
+    # for i in range(image.shape[0]):
+    #     for j in range(image.shape[1]):
+    #         x_1.append(j)
+    #         y_1.append(i)
+    #         values.append(image[i][j])
+    #         u_1.append(j + u[i][j])
+    #         v_1.append(i + v[i][j])
+    x,y = image.shape
+    x, y = np.arange(x), np.arange(y)
+    xx, yy = np.meshgrid(x,y)
+    image_flat = image.flatten()
+    u_new += xx.transpose()
+    v_new += yy.transpose()
+    u_new, v_new = u_new.flatten(), v_new.flatten()
+    bilinear_result = griddata((xx.flatten(), yy.flatten()), image_flat, (u_new.flatten(), v_new.flatten()), method='linear', fill_value=np.nan)
+    image_warp = bilinear_result.reshape(image.shape)
+    image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
     return image_warp
 
 
