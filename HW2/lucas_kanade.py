@@ -216,7 +216,7 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     """INSERT YOUR CODE HERE.
     Replace image_warp with something else.
     """
-    uv_list = [u,v]
+    uv_list = [u.copy(),v.copy()]
     for i, mat in enumerate([u,v]):
         if image.shape != mat.shape:
             factor = image.shape[1] / mat.shape[1]
@@ -235,42 +235,42 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     #         values.append(image[i][j])
     #         u_1.append(j + u[i][j])
     #         v_1.append(i + v[i][j])
-    # x,y = image.shape
-    # x, y = np.arange(x), np.arange(y)
-    # xx, yy = np.meshgrid(x,y)
-    # image_flat = image.flatten()
-    # u_new += xx.transpose()
-    # v_new += yy.transpose()
-    # u_new, v_new = u_new.flatten(), v_new.flatten()
-    # bilinear_result = griddata((xx.flatten(), yy.flatten()), image_flat, (u_new.flatten(), v_new.flatten()), method='linear', fill_value=np.nan)
-    # image_warp = bilinear_result.reshape(image.shape)
-    # image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
-    x_1 = []
-    y_1 = []
-    u_1 = []
-    v_1 = []
-    values = []
-    new_image = np.zeros(image.shape)
-    for i in range(image.shape[0]):
-        for j in range(image.shape[1]):
-            x_1.append(j)
-            y_1.append(i)
-            values.append(image[i][j])
-            u_1.append(j + u[i][j])
-            v_1.append(i + v[i][j])
-    bilinear_result = griddata((x_1, y_1), values, (u_1, v_1), method='linear')
-    new_image = bilinear_result.reshape(image.shape)
-    # for index, value in enumerate(bilinear_result):
-    #     i = index // image.shape[1]
-    #     j = index % image.shape[1]
-    #     new_image[i][j] = value
-
-    # WHEN PIXELS ARE GONE, THEY RECEIVE NAN, so we put there their original value
-    gone_pixels = np.argwhere(np.isnan(new_image))
-    if len(gone_pixels) > 0:
-        for pixel_coords in gone_pixels:
-            new_image[pixel_coords[0]][pixel_coords[1]] = image[pixel_coords[0]][pixel_coords[1]]
-    image_warp = new_image
+    y, x = image.shape
+    y, x = np.arange(y), np.arange(x)
+    xx, yy = np.meshgrid(x,y, indexing='xy')
+    image_flat = image.flatten() # values
+    u_new += xx
+    v_new += yy
+    u_new, v_new = u_new.flatten(), v_new.flatten()
+    bilinear_result = griddata((xx.flatten(), yy.flatten()), image_flat, (u_new.flatten(), v_new.flatten()), method='linear', fill_value=np.nan)
+    image_warp = bilinear_result.reshape(image.shape)
+    image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
+    # x_1 = []
+    # y_1 = []
+    # u_1 = []
+    # v_1 = []
+    # values = []
+    # new_image = np.zeros(image.shape)
+    # for i in range(image.shape[0]):
+    #     for j in range(image.shape[1]):
+    #         x_1.append(j)
+    #         y_1.append(i)
+    #         values.append(image[i][j])
+    #         u_1.append(j + u[i][j])
+    #         v_1.append(i + v[i][j])
+    # bilinear_result = griddata((x_1, y_1), values, (u_1, v_1), method='linear')
+    # new_image = bilinear_result.reshape(image.shape)
+    # # for index, value in enumerate(bilinear_result):
+    # #     i = index // image.shape[1]
+    # #     j = index % image.shape[1]
+    # #     new_image[i][j] = value
+    #
+    # # WHEN PIXELS ARE GONE, THEY RECEIVE NAN, so we put there their original value
+    # gone_pixels = np.argwhere(np.isnan(new_image))
+    # if len(gone_pixels) > 0:
+    #     for pixel_coords in gone_pixels:
+    #         new_image[pixel_coords[0]][pixel_coords[1]] = image[pixel_coords[0]][pixel_coords[1]]
+    # image_warp = new_image
     return image_warp
 
 
