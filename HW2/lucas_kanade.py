@@ -65,7 +65,9 @@ def build_pyramid(image: np.ndarray, num_levels: int) -> list[np.ndarray]:
     """
     pyramid = [image.copy()]
     """INSERT YOUR CODE HERE."""  # TODO: Check it works with the list comprehension
-    pyramid += [signal.convolve2d(PYRAMID_FILTER, pyramid[i], mode='same', boundary='symm')[::2] for i in range(num_levels)]
+    for i in range(num_levels):
+        pyramid.append(signal.convolve2d(pyramid[i], PYRAMID_FILTER, mode='same', boundary='symm'))
+        pyramid[i + 1] = pyramid[i + 1][::2, ::2]
     return pyramid
 
 
@@ -125,8 +127,7 @@ def lucas_kanade_step(I1: np.ndarray,
         return _column_stack(It[max(0, i - half_window):min(i + half_window + 1, len(It)),
                              max(0, j - half_window):min(j + half_window + 1, len(It[0]))])
     def get_derivatives(I2):
-        deriv_X_filter = np.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]])
-        deriv_Y_filter = deriv_X_filter.copy().transpose()
+
         Ix = signal.convolve2d(I2, X_DERIVATIVE_FILTER, mode='same',boundary='symm')
         Iy = signal.convolve2d(I2, Y_DERIVATIVE_FILTER, mode='same',boundary='symm')
         return Ix, Iy
@@ -331,10 +332,28 @@ def lucas_kanade_optical_flow(I1: np.ndarray,
     v = np.zeros(pyarmid_I2[-1].shape)
     """INSERT YOUR CODE HERE.
        Replace u and v with their true value."""
-    u = np.zeros(I1.shape)
-    v = np.zeros(I1.shape)
+    for level in tqdm(range(num_levels, -1, -1)):
+        I2_warped = warp_image(pyarmid_I2[level], u, v)
+        for k in range(max_iter):
+            du, dv = lucas_kanade_step(pyramid_I1[level], I2_warped, window_size)
+            u += du
+            v += dv
+            I2_warped = warp_image(pyarmid_I2[level], u, v)
+
+        if level > 0:
+            u = 2 * cv2.pyrUp(u)
+            v = 2 * cv2.pyrUp(v)
     return u, v
 
+def get_video_files(path, output_name, isColor):
+    cap = cv2.VideoCapture(path)
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')  # Define video codec
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    out_size = (width, height)
+    out = cv2.VideoWriter(output_name, fourcc, fps, out_size, isColor=isColor)
+    return cap, out
 
 def lucas_kanade_video_stabilization(input_video_path: str,
                                      output_video_path: str,
@@ -387,7 +406,53 @@ def lucas_kanade_video_stabilization(input_video_path: str,
        all windows.
     """
     """INSERT YOUR CODE HERE."""
-    pass
+    cap, out = get_video_files(input_video_path, output_video_path, isColor=False)
+    ret, prevframe = cap.read()
+    prevframe = cv2.cvtColor(prevframe, cv2.COLOR_BGR2GRAY)
+    cv2.imwrite("frame%d.jpg" % 0, prevframe)
+    out.write(prevframe)
+    K=int(np.ceil(prevframe.shape[0]/(2**(num_levels-1))))
+    M=int(np.ceil(prevframe.shape[1]/(2**(num_levels-1))))
+    M*=int(2**(num_levels-1))
+    K*=int(2**(num_levels-1))
+    IMAGE_SIZE = (K,M)
+    prevframe = cv2.resize(prevframe, IMAGE_SIZE)
+    prev_u, prev_v = np.zeros(IMAGE_SIZE), np.zeros(IMAGE_SIZE)
+    prev_u=cv2.resize(prev_u, IMAGE_SIZE)
+    prev_v=cv2.resize(prev_v, IMAGE_SIZE)
+    i = 0
+    for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))):
+        print(f"frame number {i}\n")
+        ret, next_frame = cap.read()
+        if ret:
+            next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
+            if next_frame.shape!=IMAGE_SIZE:
+                next_frame = cv2.resize(next_frame, IMAGE_SIZE)
+
+            (u, v) = lucas_kanade_optical_flow(prevframe, next_frame, window_size, max_iter, num_levels)
+            u, v = np.ones(u.shape) * np.average(u), np.ones(v.shape) * np.average(v)
+            if u.shape!=IMAGE_SIZE:
+                u=cv2.resize(u, IMAGE_SIZE)
+            if v.shape!=IMAGE_SIZE:
+                v=cv2.resize(v, IMAGE_SIZE)
+            output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
+            output_frame= cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
+
+
+            out.write(output_frame)
+            prev_u, prev_v = u + prev_u, v + prev_v
+            prevframe = next_frame
+        else:
+            break
+
+        i += 1
+
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
+    return None
+
+
 
 
 def faster_lucas_kanade_step(I1: np.ndarray,
@@ -418,6 +483,16 @@ def faster_lucas_kanade_step(I1: np.ndarray,
     """INSERT YOUR CODE HERE.
     Calculate du and dv correctly.
     """
+    if I1.shape[0]<=window_size or I1.shape[1]<=window_size:
+        return lucas_kanade_step(I1, I2, window_size)
+    else:
+        corners = cv2.goodFeaturesToTrack(I2, maxCorners=100, qualityLevel=0.01, minDistance=10, blockSize=3)
+        corners = np.int0(corners)
+        for corner in corners:
+            x, y = corner.ravel()
+            u, v = lucas_kanade_step(I1[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1], I2[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1], window_size)
+            du[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1] = u
+            dv[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1] = v
     return du, dv
 
 
@@ -453,8 +528,34 @@ def faster_lucas_kanade_optical_flow(
     v = np.zeros(pyarmid_I2[-1].shape)  # create v in the size of smallest image
     """INSERT YOUR CODE HERE.
     Replace u and v with their true value."""
-    u = np.zeros(I1.shape)
-    v = np.zeros(I1.shape)
+    h_factor = int(np.ceil(I1.shape[0] / (2 ** (num_levels - 1 + 1))))
+    w_factor = int(np.ceil(I1.shape[1] / (2 ** (num_levels - 1 + 1))))
+    IMAGE_SIZE = (w_factor * (2 ** (num_levels - 1 + 1)),
+                  h_factor * (2 ** (num_levels - 1 + 1)))
+    if I1.shape != IMAGE_SIZE:
+        I1 = cv2.resize(I1, IMAGE_SIZE)
+    if I2.shape != IMAGE_SIZE:
+        I2 = cv2.resize(I2, IMAGE_SIZE)
+    # create a pyramid from I1 and I2
+    pyramid_I1 = build_pyramid(I1, num_levels)
+    pyarmid_I2 = build_pyramid(I2, num_levels)
+    # start from u and v in the size of smallest image
+    u = np.zeros(pyarmid_I2[-1].shape)
+    v = np.zeros(pyarmid_I2[-1].shape)
+    """INSERT YOUR CODE HERE.
+       Replace u and v with their true value."""
+    for level in tqdm(range(num_levels, -1, -1)):
+        I2_warped = warp_image(pyarmid_I2[level], u, v)
+        for k in range(max_iter):
+            du, dv = faster_lucas_kanade_step(pyramid_I1[level], I2_warped, window_size)
+            u += du
+            v += dv
+            I2_warped = warp_image(pyarmid_I2[level], u, v)
+
+        if level > 0:
+            u = 2 * cv2.pyrUp(u)
+            v = 2 * cv2.pyrUp(v)
+
     return u, v
 
 
@@ -474,7 +575,45 @@ def lucas_kanade_faster_video_stabilization(
         None.
     """
     """INSERT YOUR CODE HERE."""
-    pass
+    cap, out = get_video_files(input_video_path, output_video_path, isColor=False)
+    ret, prevframe = cap.read()
+    prevframe = cv2.cvtColor(prevframe, cv2.COLOR_BGR2GRAY)
+    out.write(np.uint8(prevframe))
+    K = int(np.ceil(prevframe.shape[0] / (2 ** (num_levels - 1))))
+    M = int(np.ceil(prevframe.shape[1] / (2 ** (num_levels - 1))))
+    M *= int(2 ** (num_levels - 1))
+    K *= int(2 ** (num_levels - 1))
+    IMAGE_SIZE = (K, M)
+    prevframe = cv2.resize(prevframe, IMAGE_SIZE)
+    prev_u, prev_v = np.zeros(IMAGE_SIZE), np.zeros(IMAGE_SIZE)
+    prev_u = cv2.resize(prev_u, IMAGE_SIZE)
+    prev_v = cv2.resize(prev_v, IMAGE_SIZE)
+    i = 0
+    for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))):
+        print(f"frame number {i}\n")
+        ret, next_frame = cap.read()
+        if ret:
+            next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
+            if next_frame.shape != IMAGE_SIZE:
+                next_frame = cv2.resize(next_frame, IMAGE_SIZE)
+            (u, v) = faster_lucas_kanade_optical_flow(prevframe, next_frame, window_size, max_iter, num_levels)
+            u, v = np.ones(u.shape) * np.average(u), np.ones(v.shape) * np.average(v)
+            if u.shape != IMAGE_SIZE:
+                u = cv2.resize(u, IMAGE_SIZE)
+            if v.shape != IMAGE_SIZE:
+                v = cv2.resize(v, IMAGE_SIZE)
+            output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
+            out.write(np.uint8(output_frame))
+            prev_u, prev_v = u + prev_u, v + prev_v
+            prevframe = next_frame
+        else:
+            break
+        i += 1
+
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
+    return None
 
 
 def lucas_kanade_faster_video_stabilization_fix_effects(
@@ -498,6 +637,24 @@ def lucas_kanade_faster_video_stabilization_fix_effects(
         None.
     """
     """INSERT YOUR CODE HERE."""
-    pass
+    cap, out = get_video_files(input_video_path, output_video_path, isColor=False)
+    ret, prevframe = cap.read()
+    prevframe = cv2.cvtColor(prevframe, cv2.COLOR_BGR2GRAY)
+    out.write(np.uint8(prevframe))
+    K = int(np.ceil(prevframe.shape[0] / (2 ** (num_levels - 1))))
+    M=int(np.ceil(prevframe.shape[1] / (2 ** (num_levels - 1))))
+    if (prevframe.shape[0] - start_rows - end_rows) % 2 == 0:
+        M += 1
+    if (prevframe.shape[1] - start_cols - end_cols) % 2 == 0:
+        K += 1
+    M *= int(2 ** (num_levels - 1))
+    K *= int(2 ** (num_levels - 1))
+    IMAGE_SIZE = (K, M)
+    prevframe = cv2.resize(prevframe, IMAGE_SIZE)
+    prev_u, prev_v = np.zeros(IMAGE_SIZE), np.zeros(IMAGE_SIZE)
+    prev_u = cv2.resize(prev_u, IMAGE_SIZE)
+
+
+
 
 
