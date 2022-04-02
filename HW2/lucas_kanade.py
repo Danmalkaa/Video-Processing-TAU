@@ -101,41 +101,59 @@ def lucas_kanade_step(I1: np.ndarray,
     """INSERT YOUR CODE HERE.
     Calculate du and dv correctly.
     """
-    start_time = time.time()
+    # start_time = time.time()
 
     du = np.zeros(I1.shape)
     dv = np.zeros(I1.shape)
+    # Todo: Remove after debugging
+    # du2 = np.zeros(I1.shape)
+    # dv2 = np.zeros(I1.shape)
 
     Ix = signal.convolve2d(I2,X_DERIVATIVE_FILTER,mode='same',boundary='symm')
     Iy = signal.convolve2d(I2,Y_DERIVATIVE_FILTER,mode='same',boundary='symm')
 
-
     It = I2.astype('int16') - I1.astype('int16') # need to cast to int, as the images are unsigned int8
+
     border_size = window_size // 2
     Ix_windowed = np.lib.stride_tricks.sliding_window_view(Ix,(window_size,window_size))
     Iy_windowed = np.lib.stride_tricks.sliding_window_view(Iy,(window_size,window_size))
     It_windowed = np.lib.stride_tricks.sliding_window_view(It,(window_size,window_size))
 
-    def calc_du_dv(Ix_w, Iy_w, It_w):
-        A = np.vstack((Ix_w.ravel(), Iy_w.ravel())).T # [Ix_cs, Iy_cs]
-        b = It_w.ravel() # -It_windowed_cols : -It[p1..pk]^T
-        # b = b[:, np.newaxis]
 
-        At_A = np.matmul(A.transpose(), A)  # A^T * A
-        At_b = np.matmul(A.transpose(), b)  # A^T * A
-        try:
-            du, dv = np.linalg.lstsq(At_A, At_b, rcond=None)[0]
-        except np.linalg.LinAlgError:
-            du, dv = 0, 0
-        return du, dv
+    # TODO: Remove after Debugging
+    # def calc_du_dv(Ix_w, Iy_w, It_w):
+    #     A = np.vstack((Ix_w.ravel(), Iy_w.ravel())).T # [Ix_cs, Iy_cs]
+    #     b = It_w.ravel() # -It_windowed_cols : -It[p1..pk]^T
+    #     # b = b[:, np.newaxis]
+    #
+    #     At_A = np.matmul(A.transpose(), A)  # A^T * A
+    #     At_b = np.matmul(A.transpose(), b)  # A^T * A
+    #     try:
+    #         du, dv = np.linalg.lstsq(At_A, At_b, rcond=-1)[0]
+    #     except np.linalg.LinAlgError:
+    #         du, dv = 0, 0
+    #     return du, dv
 
+    # for i in range(border_size, len(I2) - border_size):
+    #     for j in range(border_size, len(I2[0]) - border_size):
+    #         A_1 = Ix[i-border_size:i+border_size+1, j-border_size: j+border_size+1].flatten().transpose()  # Ix_windowed_cols : Ix[p1..pk]^T
+    #         A_2 = Iy[i-border_size:i+border_size+1, j-border_size: j+border_size+1].flatten().transpose()  # Iy_windowed_cols : Iy[p1..pk]^T
+    #         A = np.column_stack((A_1, A_2))  # [Ix_cs, Iy_cs]
+    #         b = -It[i-border_size:i+border_size+1, j-border_size: j+border_size+1].flatten().transpose() # -It_windowed_cols : -It[p1..pk]^T
+    #         At_A = np.matmul(A.transpose(), A)  # A^T * A
+    #         At_b = np.matmul(A.transpose(), b)  # A^T * A
+    #         try:
+    #             # delta_p = calc_pixel_delta_p(It, Ix, Iy, i, j, window_size)
+    #             du[i][j],dv[i][j] = np.linalg.lstsq(At_A, At_b, rcond=-1)[0]
+    #         except np.linalg.LinAlgError:
+    #             du[i][j], dv[i][j] = 0,0
 
 
     for i in range(Ix_windowed.shape[0]):
         for j in range(Ix_windowed.shape[1]):
             # du[i][j], dv[i][j] = calc_du_dv(Ix_windowed[i,j],Iy_windowed[i,j],It_windowed[i,j])
             A = np.vstack((Ix_windowed[i,j].ravel(), Iy_windowed[i,j].ravel())).T  # [Ix_cs, Iy_cs]
-            b = It_windowed[i,j].ravel()  # -It_windowed_cols : -It[p1..pk]^T
+            b = -It_windowed[i,j].ravel()  # -It_windowed_cols : -It[p1..pk]^T
 
             At_A = np.matmul(A.transpose(), A)  # A^T * A
             At_b = np.matmul(A.transpose(), b)  # A^T * A
@@ -145,8 +163,8 @@ def lucas_kanade_step(I1: np.ndarray,
                 du[i+border_size][j+border_size], dv[i+border_size][j+border_size] = 0, 0
 
 
-    end_time = time.time()
-    print(f"LK Step took {end_time - start_time:.3f} sec")
+    # end_time = time.time()
+    # print(f"LK Step took {end_time - start_time:.3f} sec")
 
     return du, dv
 
@@ -252,7 +270,8 @@ def lucas_kanade_optical_flow(I1: np.ndarray,
     v = np.zeros(pyarmid_I2[-1].shape)
     """INSERT YOUR CODE HERE.
        Replace u and v with their true value."""
-    for level in tqdm(range(num_levels, -1, -1)):
+    # for level in tqdm(range(num_levels, -1, -1)):
+    for level in range(num_levels, -1, -1):
         I2_warped = warp_image(pyarmid_I2[level], u, v)
         for k in range(max_iter):
             du, dv = lucas_kanade_step(pyramid_I1[level], I2_warped, window_size)
@@ -338,9 +357,9 @@ def lucas_kanade_video_stabilization(input_video_path: str,
     prev_u, prev_v = np.zeros(IMAGE_SIZE), np.zeros(IMAGE_SIZE)
     prev_u=cv2.resize(prev_u, IMAGE_SIZE)
     prev_v=cv2.resize(prev_v, IMAGE_SIZE)
-    i = 0
-    for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))):
-        print(f"frame number {i}\n")
+    # i = 0
+    for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc='Frame Num.'):
+        # print(f"frame number {i}\n")
         ret, next_frame = cap.read()
         if ret:
             next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
@@ -348,7 +367,7 @@ def lucas_kanade_video_stabilization(input_video_path: str,
                 next_frame = cv2.resize(next_frame, IMAGE_SIZE)
 
             (u, v) = lucas_kanade_optical_flow(prevframe, next_frame, window_size, max_iter, num_levels)
-            u, v = np.ones(u.shape) * np.average(u), np.ones(v.shape) * np.average(v)
+            u, v = np.ones(u.shape) * np.average(u[u!=0]), np.ones(v.shape) * np.average(v[v!=0])
             if u.shape!=IMAGE_SIZE:
                 u=cv2.resize(u, IMAGE_SIZE)
             if v.shape!=IMAGE_SIZE:
@@ -357,13 +376,13 @@ def lucas_kanade_video_stabilization(input_video_path: str,
             output_frame= cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
 
 
-            out.write(output_frame)
+            out.write(np.uint8(output_frame))
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
             break
 
-        i += 1
+        # i += 1
 
     cap.release()
     out.release()
