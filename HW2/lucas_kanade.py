@@ -59,7 +59,7 @@ def build_pyramid(image: np.ndarray, num_levels: int) -> list[np.ndarray]:
     We use a slightly different decimation process from this function.
     """
     pyramid = [image.copy()]
-    """INSERT YOUR CODE HERE."""  # TODO: Check it works with the list comprehension
+    """INSERT YOUR CODE HERE."""
     for i in range(num_levels):
         pyramid.append(signal.convolve2d(pyramid[i], PYRAMID_FILTER, mode='same', boundary='symm'))
         pyramid[i + 1] = pyramid[i + 1][::2, ::2]
@@ -275,6 +275,10 @@ def get_video_files(path, output_name, isColor):
     out_size = (width, height)
     out = cv2.VideoWriter(output_name, fourcc, fps, out_size, isColor=isColor)
     return cap, out
+def print_frame_as_a_png(frame,frame_number):
+    cv2.imwrite("frame"+str(frame_number)+".png", frame)
+
+
 
 def lucas_kanade_video_stabilization(input_video_path: str,
                                      output_video_path: str,
@@ -328,7 +332,7 @@ def lucas_kanade_video_stabilization(input_video_path: str,
     ret, prevframe = cap.read()
     prevframe = cv2.cvtColor(prevframe, cv2.COLOR_BGR2GRAY)
     cv2.imwrite("frame%d.jpg" % 0, prevframe)
-    out.write(prevframe)
+    out.write(np.uint8(prevframe))
     K=int(np.ceil(prevframe.shape[0]/(2**(num_levels-1))))
     M=int(np.ceil(prevframe.shape[1]/(2**(num_levels-1))))
     M*=int(2**(num_levels-1))
@@ -355,14 +359,14 @@ def lucas_kanade_video_stabilization(input_video_path: str,
                 v=cv2.resize(v, IMAGE_SIZE)
             output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
             output_frame= cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
-
-
-            out.write(output_frame)
+            print_frame_as_a_png(output_frame-prevframe, i)
+            out.write(np.uint8(output_frame))
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
             break
-
+        if (i==10):
+            break
         i += 1
 
     cap.release()
