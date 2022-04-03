@@ -135,7 +135,7 @@ def lucas_kanade_step(I1: np.ndarray,
         for j in range(Ix_windowed.shape[1]):
             # du[i][j], dv[i][j] = calc_du_dv(Ix_windowed[i,j],Iy_windowed[i,j],It_windowed[i,j])
             A = np.vstack((Ix_windowed[i,j].ravel(), Iy_windowed[i,j].ravel())).T  # [Ix_cs, Iy_cs]
-            b = It_windowed[i,j].ravel()  # -It_windowed_cols : -It[p1..pk]^T
+            b = -It_windowed[i,j].ravel()  # -It_windowed_cols : -It[p1..pk]^T
 
             At_A = np.matmul(A.transpose(), A)  # A^T * A
             At_b = np.matmul(A.transpose(), b)  # A^T * A
