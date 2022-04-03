@@ -343,8 +343,8 @@ def lucas_kanade_video_stabilization(input_video_path: str,
     prev_u=cv2.resize(prev_u, IMAGE_SIZE)
     prev_v=cv2.resize(prev_v, IMAGE_SIZE)
     i = 0
-    for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))):
-        print(f"frame number {i}\n")
+    for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame number {i}"):
+
         ret, next_frame = cap.read()
         if ret:
             next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
