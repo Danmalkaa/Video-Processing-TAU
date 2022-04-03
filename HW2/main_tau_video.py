@@ -72,7 +72,7 @@ original_mse = calc_mean_mse_video(input_video_name)
 print(f"Mean MSE between frames for original video: {original_mse:.2f}")
 naive_mse = calc_mean_mse_video(output_video_name)
 print(f"Mean MSE between frames for Lucas Kanade Stabilized output video: "
-      f"{naive_mse:.2f}")
+     f"{naive_mse:.2f}")
 
 faster_output_video_name = f'{ID1}_{ID2}_faster_stabilized_video.avi'
 start_time = time.time()

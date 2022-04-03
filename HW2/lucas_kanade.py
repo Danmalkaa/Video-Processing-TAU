@@ -10,8 +10,8 @@ import time
 # FILL IN YOUR ID
 ID1 = 304773591
 ID2 = 313325938
-
-
+#get from user number of frames
+numberoffram2=80
 PYRAMID_FILTER = 1.0 / 256 * np.array([[1, 4, 6, 4, 1],
                                        [4, 16, 24, 16, 4],
                                        [6, 24, 36, 24, 6],
@@ -130,7 +130,6 @@ def lucas_kanade_step(I1: np.ndarray,
         return du, dv
 
 
-
     for i in range(Ix_windowed.shape[0]):
         for j in range(Ix_windowed.shape[1]):
             # du[i][j], dv[i][j] = calc_du_dv(Ix_windowed[i,j],Iy_windowed[i,j],It_windowed[i,j])
@@ -150,7 +149,90 @@ def lucas_kanade_step(I1: np.ndarray,
 
     return du, dv
 
+def lucas_kanade_step_new(I1: np.ndarray,
+                      I2: np.ndarray,
+                      window_size: int) -> tuple[np.ndarray, np.ndarray]:
+    """Perform one Lucas-Kanade Step.
+    This method receives two images as inputs and a window_size. It
+    calculates the per-pixel shift in the x-axis and y-axis. That is,
+    it outputs two maps of the shape of the input images. The first map
+    encodes the per-pixel optical flow parameters in the x-axis and the
+    second in the y-axis.
+    (1) Calculate Ix and Iy by convolving I2 with the appropriate filters (
+    see the constants in the head of this file).
+    (2) Calculate It from I1 and I2.
+    (3) Calculate du and dv for each pixel:
+      (3.1) Start from all-zeros du and dv (each one) of size I1.shape.
+      (3.2) Loop over all pixels in the image (you can ignore boundary pixels up
+      to ~window_size/2 pixels in each side of the image [top, bottom,
+      left and right]).
+      (3.3) For every pixel, pretend the pixel’s neighbors have the same (u,
+      v). This means that for NxN window, we have N^2 equations per pixel.
+      (3.4) Solve for (u, v) using Least-Squares solution. When the solution
+      does not converge, keep this pixel's (u, v) as zero.
+    For detailed Equations reference look at slides 4 & 5 in:
+    http://www.cse.psu.edu/~rtc12/CSE486/lecture30.pdf
+    Args:
+        I1: np.ndarray. Image at time t.
+        I2: np.ndarray. Image at time t+1.
+        window_size: int. The window is of shape window_size X window_size.
+    Returns:
+        (du, dv): tuple of np.ndarray-s. Each one is of the shape of the
+        original image. dv encodes the optical flow parameters in rows and du
+        in columns.
+    """
+    """INSERT YOUR CODE HERE.
+    Calculate du and dv correctly.
+    """
+    start_time = time.time()
 
+    du = np.zeros(I1.shape)
+    dv = np.zeros(I1.shape)
+
+    Ix = signal.convolve2d(I2,X_DERIVATIVE_FILTER,mode='same',boundary='symm')
+    Iy = signal.convolve2d(I2,Y_DERIVATIVE_FILTER,mode='same',boundary='symm')
+
+
+    It = I2.astype('int16') - I1.astype('int16') # need to cast to int, as the images are unsigned int8
+    border_size = window_size // 2
+    Ix_windowed = np.lib.stride_tricks.sliding_window_view(Ix,(window_size,window_size))
+    Iy_windowed = np.lib.stride_tricks.sliding_window_view(Iy,(window_size,window_size))
+    It_windowed = np.lib.stride_tricks.sliding_window_view(It,(window_size,window_size))
+
+
+
+    def calc_du_dv(Ix_windowed_cols, Iy_windowed_cols, It_windowed_cols):
+        A = np.vstack((Ix_windowed_cols.ravel(), Iy_windowed_cols.ravel())).T  # [Ix_cs, Iy_cs]
+        b = It_windowed_cols.ravel()  # -It_windowed_cols : -It[p1..pk]^T
+        # b = b[:, np.newaxis]
+
+        At_A = np.matmul(A.transpose(), A)  # A^T * A
+        At_b = np.matmul(A.transpose(), b)  # A^T * A
+        try:
+            du, dv = np.linalg.lstsq(At_A, At_b, rcond=None)[0]
+        except np.linalg.LinAlgError:
+            du, dv = 0, 0
+        return du, dv
+    du ,dv =[calc_du_dv(Ix_windowed[i,j], Iy_windowed[i,j], It_windowed[i,j]) for i in range(Ix_windowed.shape[0]) for j in range(Ix_windowed.shape[1])]
+
+    for i in range(Ix_windowed.shape[0]):
+        for j in range(Ix_windowed.shape[1]):
+            # du[i][j], dv[i][j] = calc_du_dv(Ix_windowed[i,j],Iy_windowed[i,j],It_windowed[i,j])
+            A = np.vstack((Ix_windowed[i,j].ravel(), Iy_windowed[i,j].ravel())).T  # [Ix_cs, Iy_cs]
+            b = -It_windowed[i,j].ravel()  # -It_windowed_cols : -It[p1..pk]^T
+
+            At_A = np.matmul(A.transpose(), A)  # A^T * A
+            At_b = np.matmul(A.transpose(), b)  # A^T * A
+            try:
+                du[i+border_size][j+border_size], dv[i+border_size][j+border_size] = np.linalg.lstsq(At_A, At_b, rcond=-1)[0]
+            except np.linalg.LinAlgError:
+                du[i+border_size][j+border_size], dv[i+border_size][j+border_size] = 0, 0
+
+
+    end_time = time.time()
+    print(f"LK Step took {end_time - start_time:.3f} sec")
+
+    return du, dv
 def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     """Warp image using the optical flow parameters in u and v.
     Note that this method needs to support the case where u and v shapes do
@@ -359,11 +441,13 @@ def lucas_kanade_video_stabilization(input_video_path: str,
 
             #print frame as a jpg
             cv2.imwrite("frame%d.jpg" % i, output_frame)
-            cv2.imwrite("frame_diff%d.jpg" % i, next_frame-temp_frame)
+
             out.write(np.uint8(output_frame))
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
+            break
+        if (i == numberoffram2):
             break
 
 
@@ -414,9 +498,9 @@ def faster_lucas_kanade_step(I1: np.ndarray,
         for corner in corners:
             x, y = corner.ravel()
 
-            Ix_windowed=Ix[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1]
-            Iy_windowed=Iy[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1]
-            It_windowed=It[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1]
+            Ix_windowed=Ix[y-window_size//2:y+window_size//2+1,x-window_size//2:x+window_size//2+1]
+            Iy_windowed=Iy[y-window_size//2:y+window_size//2+1,x-window_size//2:x+window_size//2+1]
+            It_windowed=It[y-window_size//2:y+window_size//2+1,x-window_size//2:x+window_size//2+1]
 
 
             A = np.vstack((Ix_windowed.ravel(), Iy_windowed.ravel())).T  # [Ix_cs, Iy_cs]
@@ -540,13 +624,16 @@ def lucas_kanade_faster_video_stabilization(
             output_frame = cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
 
             # print frame as a jpg
-            cv2.imwrite("frame_diff_f%d.jpg" % i, temp_frame-next_frame)
+
             cv2.imwrite("frame_f%d.jpg" % (i ), output_frame)
             out.write(np.uint8(output_frame))
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
             break
+        if(i==numberoffram2):
+            break
+
 
 
         i += 1
