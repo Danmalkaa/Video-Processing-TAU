@@ -356,11 +356,14 @@ def lucas_kanade_video_stabilization(input_video_path: str,
             output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
             output_frame= cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
 
-
-            out.write(output_frame)
+            #print frame as a jpg
+            cv2.imwrite("frame%d.jpg" % i, output_frame)
+            out.write(np.uint8(output_frame))
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
+            break
+        if i==10:
             break
 
         i += 1
