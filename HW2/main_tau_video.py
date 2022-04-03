@@ -70,7 +70,6 @@ statistics["[TAU, TIME] naive LK implementation"] = end_time - start_time
 print("The Following MSE values should make sense to you:")
 original_mse = calc_mean_mse_video(input_video_name)
 print(f"Mean MSE between frames for original video: {original_mse:.2f}")
-naive_mse = calc_mean_mse_video(output_video_name)
 print(f"Mean MSE between frames for Lucas Kanade Stabilized output video: "
      f"{naive_mse:.2f}")
 

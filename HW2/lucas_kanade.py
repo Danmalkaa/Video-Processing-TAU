@@ -11,7 +11,7 @@ import time
 ID1 = 304773591
 ID2 = 313325938
 #get from user number of frames
-numberoffram2=80
+numberoffram2=25
 PYRAMID_FILTER = 1.0 / 256 * np.array([[1, 4, 6, 4, 1],
                                        [4, 16, 24, 16, 4],
                                        [6, 24, 36, 24, 6],
@@ -24,7 +24,30 @@ Y_DERIVATIVE_FILTER = X_DERIVATIVE_FILTER.copy().transpose()
 
 WINDOW_SIZE = 5
 
+def read_frame_as_a_jpg_file_to_array(n):
+    """
 
+    :param path:
+    :return:
+    """
+    lst = []
+    for i in range(n):
+        #open a jpg file
+
+        img = cv2.imread("frame%d.jpg" % i)
+
+        lst.append(img)
+    return lst
+
+def array_of_frame_to_video_file(array_of_frames, output_video_path,n):
+
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    out = cv2.VideoWriter(output_video_path, fourcc, 30.0, (array_of_frames[0].shape[1], array_of_frames[0].shape[0]))
+    for i in range(len(array_of_frames)):
+        #out.write(array_of_frames[i])
+        out.write(np.uint8(array_of_frames[i]))
+    out.release()
+    return None
 def get_video_parameters(capture: cv2.VideoCapture) -> dict:
     """Get an OpenCV capture object and extract its parameters.
     Args:
@@ -421,6 +444,7 @@ def lucas_kanade_video_stabilization(input_video_path: str,
     prev_u=cv2.resize(prev_u, IMAGE_SIZE)
     prev_v=cv2.resize(prev_v, IMAGE_SIZE)
     i = 0
+    frame_array=[]
     for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame "):
 
         ret, next_frame = cap.read()
@@ -438,7 +462,7 @@ def lucas_kanade_video_stabilization(input_video_path: str,
                 v=cv2.resize(v, IMAGE_SIZE)
             output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
             output_frame= cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
-
+            frame_array.append(output_frame)
             #print frame as a jpg
             cv2.imwrite("frame%d.jpg" % i, output_frame)
 
@@ -452,7 +476,7 @@ def lucas_kanade_video_stabilization(input_video_path: str,
 
 
         i += 1
-
+    array_of_frame_to_video_file(frame_array, output_video_path,i)
     cap.release()
     out.release()
     cv2.destroyAllWindows()
@@ -605,6 +629,7 @@ def lucas_kanade_faster_video_stabilization(
     prev_u = cv2.resize(prev_u, IMAGE_SIZE)
     prev_v = cv2.resize(prev_v, IMAGE_SIZE)
     i = 0
+    array_of_frame=[]
     for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame "):
 
         ret, next_frame = cap.read()
@@ -622,7 +647,7 @@ def lucas_kanade_faster_video_stabilization(
                 v = cv2.resize(v, IMAGE_SIZE)
             output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
             output_frame = cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
-
+            array_of_frame.append(output_frame)
             # print frame as a jpg
 
             cv2.imwrite("frame_f%d.jpg" % (i ), output_frame)
@@ -679,3 +704,5 @@ def lucas_kanade_faster_video_stabilization_fix_effects(
     prevframe = cv2.resize(prevframe, IMAGE_SIZE)
     prev_u, prev_v = np.zeros(IMAGE_SIZE), np.zeros(IMAGE_SIZE)
     prev_u = cv2.resize(prev_u, IMAGE_SIZE)
+
+
