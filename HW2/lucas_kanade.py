@@ -339,13 +339,14 @@ def lucas_kanade_video_stabilization(input_video_path: str,
     prev_u=cv2.resize(prev_u, IMAGE_SIZE)
     prev_v=cv2.resize(prev_v, IMAGE_SIZE)
     i = 0
-    for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame number {i}"):
+    for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame "):
 
         ret, next_frame = cap.read()
         if ret:
             next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
             if next_frame.shape!=IMAGE_SIZE:
                 next_frame = cv2.resize(next_frame, IMAGE_SIZE)
+            temp_frame=next_frame.copy()
 
             (u, v) = lucas_kanade_optical_flow(prevframe, next_frame, window_size, max_iter, num_levels)
             u, v = np.ones(u.shape) * np.average(u), np.ones(v.shape) * np.average(v)
@@ -358,13 +359,13 @@ def lucas_kanade_video_stabilization(input_video_path: str,
 
             #print frame as a jpg
             cv2.imwrite("frame%d.jpg" % i, output_frame)
+            cv2.imwrite("frame_diff%d.jpg" % i, next_frame-temp_frame)
             out.write(np.uint8(output_frame))
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
             break
-        if i==10:
-            break
+
 
         i += 1
 
@@ -401,16 +402,32 @@ def faster_lucas_kanade_step(I1: np.ndarray,
     """INSERT YOUR CODE HERE.
     Calculate du and dv correctly.
     """
+    Ix = signal.convolve2d(I2,X_DERIVATIVE_FILTER,mode='same',boundary='symm')
+    Iy = signal.convolve2d(I2,Y_DERIVATIVE_FILTER,mode='same',boundary='symm')
+    It = I2.astype('int16') - I1.astype('int16')
     if I1.shape[0]<=window_size or I1.shape[1]<=window_size:
         return lucas_kanade_step(I1, I2, window_size)
     else:
-        corners = cv2.goodFeaturesToTrack(I2, maxCorners=100, qualityLevel=0.01, minDistance=10, blockSize=3)
+        I2_temp=np.uint8(I2)
+        corners = cv2.goodFeaturesToTrack(I2_temp, maxCorners=100, qualityLevel=0.01, minDistance=10, blockSize=window_size)
         corners = np.int0(corners)
         for corner in corners:
             x, y = corner.ravel()
-            u, v = lucas_kanade_step(I1[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1], I2[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1], window_size)
-            du[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1] = u
-            dv[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1] = v
+
+            Ix_windowed=Ix[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1]
+            Iy_windowed=Iy[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1]
+            It_windowed=It[x-window_size//2:x+window_size//2+1, y-window_size//2:y+window_size//2+1]
+
+
+            A = np.vstack((Ix_windowed.ravel(), Iy_windowed.ravel())).T  # [Ix_cs, Iy_cs]
+            b = -It_windowed.ravel()  # -It_windowed_cols : -It[p1..pk]^T
+
+            At_A = np.matmul(A.transpose(), A)  # A^T * A
+            At_b = np.matmul(A.transpose(), b)  # A^T * A
+            try:
+                du[y][x], dv[y][x] = np.linalg.lstsq(At_A, At_b, rcond=-1)[0]
+            except np.linalg.LinAlgError:
+                du[y][x], dv[y][x] = 0, 0
     return du, dv
 
 
@@ -468,8 +485,9 @@ def faster_lucas_kanade_optical_flow(
             I2_warped = warp_image(pyarmid_I2[level], u, v)
 
         if level > 0:
-            u = 2 * cv2.pyrUp(u)
-            v = 2 * cv2.pyrUp(v)
+            dim = (2 * u.shape[1], 2 * u.shape[0])
+            u = 2 * cv2.resize(u, dim)
+            v = 2 * cv2.resize(v, dim)
 
     return u, v
 
@@ -491,7 +509,8 @@ def lucas_kanade_faster_video_stabilization(
     cap, out = get_video_files(input_video_path, output_video_path, isColor=False)
     ret, prevframe = cap.read()
     prevframe = cv2.cvtColor(prevframe, cv2.COLOR_BGR2GRAY)
-    out.write(np.uint8(prevframe))
+    cv2.imwrite("frame%d.jpg" % 0, prevframe)
+    out.write(prevframe)
     K = int(np.ceil(prevframe.shape[0] / (2 ** (num_levels - 1))))
     M = int(np.ceil(prevframe.shape[1] / (2 ** (num_levels - 1))))
     M *= int(2 ** (num_levels - 1))
@@ -502,13 +521,15 @@ def lucas_kanade_faster_video_stabilization(
     prev_u = cv2.resize(prev_u, IMAGE_SIZE)
     prev_v = cv2.resize(prev_v, IMAGE_SIZE)
     i = 0
-    for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))):
-        print(f"frame number {i}\n")
+    for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame "):
+
         ret, next_frame = cap.read()
         if ret:
             next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
             if next_frame.shape != IMAGE_SIZE:
                 next_frame = cv2.resize(next_frame, IMAGE_SIZE)
+            temp_frame = next_frame.copy()
+
             (u, v) = faster_lucas_kanade_optical_flow(prevframe, next_frame, window_size, max_iter, num_levels)
             u, v = np.ones(u.shape) * np.average(u), np.ones(v.shape) * np.average(v)
             if u.shape != IMAGE_SIZE:
@@ -516,11 +537,18 @@ def lucas_kanade_faster_video_stabilization(
             if v.shape != IMAGE_SIZE:
                 v = cv2.resize(v, IMAGE_SIZE)
             output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
+            output_frame = cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
+
+            # print frame as a jpg
+            cv2.imwrite("frame_diff_f%d.jpg" % i, temp_frame-next_frame)
+            cv2.imwrite("frame_f%d.jpg" % (i ), output_frame)
             out.write(np.uint8(output_frame))
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
             break
+
+
         i += 1
 
     cap.release()

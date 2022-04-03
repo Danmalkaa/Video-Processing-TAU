@@ -12,9 +12,9 @@ ID1 = '123456789'
 ID2 = '987654321'
 
 # Choose parameters
-WINDOW_SIZE_TAU = 11  # Add your value here!
-MAX_ITER_TAU = 1  # Add your value here!
-NUM_LEVELS_TAU = 1  # Add your value here!
+WINDOW_SIZE_TAU = 5  # Add your value here!
+MAX_ITER_TAU = 3  # Add your value here!
+NUM_LEVELS_TAU = 3  # Add your value here!
 
 
 # Output dir and statistics file preparations:
@@ -67,7 +67,7 @@ print(f'LK-Video Stabilization Taking all pixels into account took: '
       f'{end_time - start_time:.2f}[sec]')
 statistics["[TAU, TIME] naive LK implementation"] = end_time - start_time
 
-print("The Following MSE values should make sense to you:")#todo:delete
+print("The Following MSE values should make sense to you:")
 original_mse = calc_mean_mse_video(input_video_name)
 print(f"Mean MSE between frames for original video: {original_mse:.2f}")
 naive_mse = calc_mean_mse_video(output_video_name)
@@ -85,6 +85,13 @@ end_time = time.time()
 print(f'LK-Video Stabilization FASTER implementation took: '
       f'{end_time - start_time:.2f}[sec]')
 statistics["[TAU, TIME] FASTER LK implementation"] = end_time - start_time
+
+print("The Following MSE values should make sense to you:")
+original_mse = calc_mean_mse_video(input_video_name)
+print(f"Mean MSE between frames for original video: {original_mse:.2f}")
+naive_mse = calc_mean_mse_video(faster_output_video_name)
+print(f"Mean MSE between frames for Lucas Kanade Stabilized output video: "
+      f"{naive_mse:.2f}")
 
 fixed_image_borders_output_video_name = f'{ID1}_{ID2}_' \
                                         f'fixed_borders_stabilized_video.avi'
