@@ -57,27 +57,29 @@ def array_of_frame_to_avi_file(array_of_frames, output_video_path):
     out = cv2.VideoWriter(output_video_path, fourcc, 20.0, (640, 480))
     for i in range(len(array_of_frames)):
         #resize the frame
-        array_of_frames[i] = cv2.resize(array_of_frames[i], (640, 480))
-
+        array_of_frames[i] = cv2.resize(np.uint8(array_of_frames[i]), (640, 480))
+        if len(array_of_frames[i].shape)==2:
+            array_of_frames[i] = cv2.cvtColor(array_of_frames[i], cv2.COLOR_GRAY2RGB)
         # write the flipped frame
         out.write(array_of_frames[i])
     out.release()
     return None
-def array_of_frame_to_video_file(array_of_frames, output_video_path,input_video_path):
-    cap,out = get_video_files(input_video_path, output_video_path, isColor=False)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    out_size = (height,width)
-    for i in range(2,len(array_of_frames)):
-        array_of_frames[i]=cv2.resize(array_of_frames[i], out_size)
-        #show the frame
-        # cv2.imshow('frame',array_of_frames[i])
-        #
-        # cv2.waitKey(0)
-        out.write(np.uint8(array_of_frames[i]))
-    out.release()
-    cap.release()
-    cv2.destroyAllWindows()
+
+# def array_of_frame_to_video_file(array_of_frames, output_video_path,input_video_path):
+#     cap,out = get_video_files(input_video_path, output_video_path, isColor=False)
+#     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+#     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+#     out_size = (height,width)
+#     for i in range(2,len(array_of_frames)):
+#         array_of_frames[i]=cv2.resize(np.uint8(array_of_frames[i]), out_size)
+#         #show the frame
+#         # cv2.imshow('frame',array_of_frames[i])
+#         #
+#         # cv2.waitKey(0)
+#         out.write(np.uint8(array_of_frames[i]))
+#     out.release()
+#     cap.release()
+#     cv2.destroyAllWindows()
 
 
 
@@ -693,6 +695,10 @@ def lucas_kanade_faster_video_stabilization(
             prevframe = next_frame
         else:
             break
+
+
+
+
         i += 1
     cap.release()
     out.release()
@@ -743,6 +749,6 @@ def lucas_kanade_faster_video_stabilization_fix_effects(
     return None
 
 
-# lst=read_frame_as_a_jpg_file_to_array(64)
+# lst=read_frame_as_a_jpg_file_to_array(15)
 # array_of_frame_to_avi_file(lst,"test.avi")
 # lucas_kanade_faster_video_stabilization_fix_effects("test.avi","outpot_fix_test.avi", 3, 11,5)
