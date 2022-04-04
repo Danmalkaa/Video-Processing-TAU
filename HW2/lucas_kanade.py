@@ -693,10 +693,6 @@ def lucas_kanade_faster_video_stabilization(
             prevframe = next_frame
         else:
             break
-
-
-
-
         i += 1
     cap.release()
     out.release()
@@ -747,6 +743,6 @@ def lucas_kanade_faster_video_stabilization_fix_effects(
     return None
 
 
-lst=read_frame_as_a_jpg_file_to_array(64)
-array_of_frame_to_avi_file(lst,"test.avi")
-lucas_kanade_faster_video_stabilization_fix_effects("test.avi","outpot_fix_test.avi", 3, 11,5)
+# lst=read_frame_as_a_jpg_file_to_array(64)
+# array_of_frame_to_avi_file(lst,"test.avi")
+# lucas_kanade_faster_video_stabilization_fix_effects("test.avi","outpot_fix_test.avi", 3, 11,5)
