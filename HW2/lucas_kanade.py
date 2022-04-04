@@ -10,8 +10,7 @@ import time
 # FILL IN YOUR ID
 ID1 = 304773591
 ID2 = 313325938
-#get from user number of frames
-numberoffram2=25
+
 PYRAMID_FILTER = 1.0 / 256 * np.array([[1, 4, 6, 4, 1],
                                        [4, 16, 24, 16, 4],
                                        [6, 24, 36, 24, 6],
@@ -34,30 +33,33 @@ def get_video_files(path, output_name, isColor):
     return cap, out
 def read_frame_as_a_jpg_file_to_array(n):
     """
-
-    :param path:
-    :return:
+    this function reads the frame n from the jpg file and returns it as a  array
+    this function is used us to debug the code and use finelly
+    :param n: the number of the frame to read
+    :return: lst: the list of the frame
     """
     lst = []
     for i in range(n):
         #open a jpg file
 
-        img = cv2.imread("frame%d.jpg" % i)
+        img = cv2.imread("frame_f%d.jpg" % i)
 
         lst.append(img)
     return lst
 def array_of_frame_to_avi_file(array_of_frames, output_video_path):
     """
+    this function takes an array of frames and save it to an avi file
     :param array_of_frames:
     :param output_video_path:
-    :return:
+    :return: None
     """
     # Define the codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter(output_video_path, fourcc, 20.0, (640, 480))
+    frame_size=(array_of_frames[0].shape[1],array_of_frames[0].shape[0])
+    out = cv2.VideoWriter(output_video_path, fourcc, 20.0, frame_size)
     for i in range(len(array_of_frames)):
         #resize the frame
-        array_of_frames[i] = cv2.resize(np.uint8(array_of_frames[i]), (640, 480))
+        array_of_frames[i] = cv2.resize(np.uint8(array_of_frames[i]), frame_size)
         if len(array_of_frames[i].shape)==2:
             array_of_frames[i] = cv2.cvtColor(array_of_frames[i], cv2.COLOR_GRAY2RGB)
         # write the flipped frame
@@ -65,25 +67,6 @@ def array_of_frame_to_avi_file(array_of_frames, output_video_path):
     out.release()
     return None
 
-# def array_of_frame_to_video_file(array_of_frames, output_video_path,input_video_path):
-#     cap,out = get_video_files(input_video_path, output_video_path, isColor=False)
-#     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-#     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-#     out_size = (height,width)
-#     for i in range(2,len(array_of_frames)):
-#         array_of_frames[i]=cv2.resize(np.uint8(array_of_frames[i]), out_size)
-#         #show the frame
-#         # cv2.imshow('frame',array_of_frames[i])
-#         #
-#         # cv2.waitKey(0)
-#         out.write(np.uint8(array_of_frames[i]))
-#     out.release()
-#     cap.release()
-#     cv2.destroyAllWindows()
-
-
-
-    return None
 def get_video_parameters(capture: cv2.VideoCapture) -> dict:
     """Get an OpenCV capture object and extract its parameters.
     Args:
@@ -98,7 +81,6 @@ def get_video_parameters(capture: cv2.VideoCapture) -> dict:
     frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
     return {"fourcc": fourcc, "fps": fps, "height": height, "width": width,
             "frame_count": frame_count}
-
 
 def build_pyramid(image: np.ndarray, num_levels: int) -> list[np.ndarray]:
     """Coverts image to a pyramid list of size num_levels.
@@ -123,7 +105,6 @@ def build_pyramid(image: np.ndarray, num_levels: int) -> list[np.ndarray]:
         pyramid.append(signal.convolve2d(pyramid[i], PYRAMID_FILTER, mode='same', boundary='symm'))
         pyramid[i + 1] = pyramid[i + 1][::2, ::2]
     return pyramid
-
 
 def lucas_kanade_step(I1: np.ndarray,
                       I2: np.ndarray,
@@ -161,37 +142,18 @@ def lucas_kanade_step(I1: np.ndarray,
     Calculate du and dv correctly.
     """
     start_time = time.time()
-
     du = np.zeros(I1.shape)
     dv = np.zeros(I1.shape)
-
     Ix = signal.convolve2d(I2,X_DERIVATIVE_FILTER,mode='same',boundary='symm')
     Iy = signal.convolve2d(I2,Y_DERIVATIVE_FILTER,mode='same',boundary='symm')
-
-
     It = I2.astype('int16') - I1.astype('int16') # need to cast to int, as the images are unsigned int8
     border_size = window_size // 2
     Ix_windowed = np.lib.stride_tricks.sliding_window_view(Ix,(window_size,window_size))
     Iy_windowed = np.lib.stride_tricks.sliding_window_view(Iy,(window_size,window_size))
     It_windowed = np.lib.stride_tricks.sliding_window_view(It,(window_size,window_size))
-
-    def calc_du_dv(Ix_w, Iy_w, It_w):
-        A = np.vstack((Ix_w.ravel(), Iy_w.ravel())).T # [Ix_cs, Iy_cs]
-        b = It_w.ravel() # -It_windowed_cols : -It[p1..pk]^T
-        # b = b[:, np.newaxis]
-
-        At_A = np.matmul(A.transpose(), A)  # A^T * A
-        At_b = np.matmul(A.transpose(), b)  # A^T * A
-        try:
-            du, dv = np.linalg.lstsq(At_A, At_b, rcond=None)[0]
-        except np.linalg.LinAlgError:
-            du, dv = 0, 0
-        return du, dv
-
-
     for i in range(Ix_windowed.shape[0]):
         for j in range(Ix_windowed.shape[1]):
-            # du[i][j], dv[i][j] = calc_du_dv(Ix_windowed[i,j],Iy_windowed[i,j],It_windowed[i,j])
+
             A = np.vstack((Ix_windowed[i,j].ravel(), Iy_windowed[i,j].ravel())).T  # [Ix_cs, Iy_cs]
             b = -It_windowed[i,j].ravel()  # -It_windowed_cols : -It[p1..pk]^T
 
@@ -201,97 +163,9 @@ def lucas_kanade_step(I1: np.ndarray,
                 du[i+border_size][j+border_size], dv[i+border_size][j+border_size] = np.linalg.lstsq(At_A, At_b, rcond=-1)[0]
             except np.linalg.LinAlgError:
                 du[i+border_size][j+border_size], dv[i+border_size][j+border_size] = 0, 0
-
-
     end_time = time.time()
-
-
     return du, dv
 
-def lucas_kanade_step_new(I1: np.ndarray,
-                      I2: np.ndarray,
-                      window_size: int) -> tuple[np.ndarray, np.ndarray]:
-    """Perform one Lucas-Kanade Step.
-    This method receives two images as inputs and a window_size. It
-    calculates the per-pixel shift in the x-axis and y-axis. That is,
-    it outputs two maps of the shape of the input images. The first map
-    encodes the per-pixel optical flow parameters in the x-axis and the
-    second in the y-axis.
-    (1) Calculate Ix and Iy by convolving I2 with the appropriate filters (
-    see the constants in the head of this file).
-    (2) Calculate It from I1 and I2.
-    (3) Calculate du and dv for each pixel:
-      (3.1) Start from all-zeros du and dv (each one) of size I1.shape.
-      (3.2) Loop over all pixels in the image (you can ignore boundary pixels up
-      to ~window_size/2 pixels in each side of the image [top, bottom,
-      left and right]).
-      (3.3) For every pixel, pretend the pixel’s neighbors have the same (u,
-      v). This means that for NxN window, we have N^2 equations per pixel.
-      (3.4) Solve for (u, v) using Least-Squares solution. When the solution
-      does not converge, keep this pixel's (u, v) as zero.
-    For detailed Equations reference look at slides 4 & 5 in:
-    http://www.cse.psu.edu/~rtc12/CSE486/lecture30.pdf
-    Args:
-        I1: np.ndarray. Image at time t.
-        I2: np.ndarray. Image at time t+1.
-        window_size: int. The window is of shape window_size X window_size.
-    Returns:
-        (du, dv): tuple of np.ndarray-s. Each one is of the shape of the
-        original image. dv encodes the optical flow parameters in rows and du
-        in columns.
-    """
-    """INSERT YOUR CODE HERE.
-    Calculate du and dv correctly.
-    """
-    start_time = time.time()
-
-    du = np.zeros(I1.shape)
-    dv = np.zeros(I1.shape)
-
-    Ix = signal.convolve2d(I2,X_DERIVATIVE_FILTER,mode='same',boundary='symm')
-    Iy = signal.convolve2d(I2,Y_DERIVATIVE_FILTER,mode='same',boundary='symm')
-
-
-    It = I2.astype('int16') - I1.astype('int16') # need to cast to int, as the images are unsigned int8
-    border_size = window_size // 2
-    Ix_windowed = np.lib.stride_tricks.sliding_window_view(Ix,(window_size,window_size))
-    Iy_windowed = np.lib.stride_tricks.sliding_window_view(Iy,(window_size,window_size))
-    It_windowed = np.lib.stride_tricks.sliding_window_view(It,(window_size,window_size))
-
-
-
-    def calc_du_dv(Ix_windowed_cols, Iy_windowed_cols, It_windowed_cols):
-        A = np.vstack((Ix_windowed_cols.ravel(), Iy_windowed_cols.ravel())).T  # [Ix_cs, Iy_cs]
-        b = It_windowed_cols.ravel()  # -It_windowed_cols : -It[p1..pk]^T
-        # b = b[:, np.newaxis]
-
-        At_A = np.matmul(A.transpose(), A)  # A^T * A
-        At_b = np.matmul(A.transpose(), b)  # A^T * A
-        try:
-            du, dv = np.linalg.lstsq(At_A, At_b, rcond=None)[0]
-        except np.linalg.LinAlgError:
-            du, dv = 0, 0
-        return du, dv
-    du ,dv =[calc_du_dv(Ix_windowed[i,j], Iy_windowed[i,j], It_windowed[i,j]) for i in range(Ix_windowed.shape[0]) for j in range(Ix_windowed.shape[1])]
-
-    for i in range(Ix_windowed.shape[0]):
-        for j in range(Ix_windowed.shape[1]):
-            # du[i][j], dv[i][j] = calc_du_dv(Ix_windowed[i,j],Iy_windowed[i,j],It_windowed[i,j])
-            A = np.vstack((Ix_windowed[i,j].ravel(), Iy_windowed[i,j].ravel())).T  # [Ix_cs, Iy_cs]
-            b = -It_windowed[i,j].ravel()  # -It_windowed_cols : -It[p1..pk]^T
-
-            At_A = np.matmul(A.transpose(), A)  # A^T * A
-            At_b = np.matmul(A.transpose(), b)  # A^T * A
-            try:
-                du[i+border_size][j+border_size], dv[i+border_size][j+border_size] = np.linalg.lstsq(At_A, At_b, rcond=-1)[0]
-            except np.linalg.LinAlgError:
-                du[i+border_size][j+border_size], dv[i+border_size][j+border_size] = 0, 0
-
-
-    end_time = time.time()
-    print(f"LK Step took {end_time - start_time:.3f} sec")
-
-    return du, dv
 def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     """Warp image using the optical flow parameters in u and v.
     Note that this method needs to support the case where u and v shapes do
@@ -337,7 +211,6 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     image_warp = interpolation_result.reshape(image.shape)
     image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
     return image_warp
-
 
 def lucas_kanade_optical_flow(I1: np.ndarray,
                               I2: np.ndarray,
@@ -400,14 +273,11 @@ def lucas_kanade_optical_flow(I1: np.ndarray,
             u += du
             v += dv
             I2_warped = warp_image(pyarmid_I2[level], u, v)
-
         if level > 0:
             dim = (2*u.shape[1], 2*u.shape[0])
             u = 2 * cv2.resize(u, dim)
             v = 2 * cv2.resize(v, dim)
     return u, v
-
-
 
 def lucas_kanade_video_stabilization(input_video_path: str,
                                      output_video_path: str,
@@ -460,8 +330,6 @@ def lucas_kanade_video_stabilization(input_video_path: str,
     cap, out = get_video_files(input_video_path, output_video_path, isColor=False)
     ret, prevframe = cap.read()
     prevframe = cv2.cvtColor(prevframe, cv2.COLOR_BGR2GRAY)
-    cv2.imwrite("frame%d.jpg" % 0, prevframe)
-    out.write(prevframe)
     K=int(np.ceil(prevframe.shape[0]/(2**(num_levels-1))))
     M=int(np.ceil(prevframe.shape[1]/(2**(num_levels-1))))
     M*=int(2**(num_levels-1))
@@ -474,7 +342,6 @@ def lucas_kanade_video_stabilization(input_video_path: str,
     i = 0
     frame_array=[]
     for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame "):
-
         ret, next_frame = cap.read()
         if ret:
             next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
@@ -490,33 +357,20 @@ def lucas_kanade_video_stabilization(input_video_path: str,
                 v=cv2.resize(v, IMAGE_SIZE)
             output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
             output_frame= cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
-
-
-            #print frame as a jpg
-            cv2.imwrite("frame%d.jpg" % i, output_frame)
-            #read frame
-            frame_out=cv2.imread("frame%d.jpg" % i)
-            # delete frame file
-            # os.remove("frame%d.jpg" % (i ))
-            out.write(np.uint8(frame_out))
-            frame_array.append(frame_out)
+            cv2.imwrite("result_temp/frame%d.jpg" % i, output_frame)#todo:delete
+            frame_array.append(output_frame)
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
             break
-
-
-
-
+        # if(i==2):#todo:delete
+        #     break#todo:delete
         i += 1
     cap.release()
     out.release()
     cv2.destroyAllWindows()
     array_of_frame_to_avi_file(frame_array, output_video_path)
     return None
-
-
-
 
 def faster_lucas_kanade_step(I1: np.ndarray,
                              I2: np.ndarray,
@@ -537,7 +391,6 @@ def faster_lucas_kanade_step(I1: np.ndarray,
         (du, dv): tuple of np.ndarray-s. Each one of the shape of the
         original image. dv encodes the shift in rows and du in columns.
     """
-
     du = np.zeros(I1.shape)
     dv = np.zeros(I1.shape)
     """INSERT YOUR CODE HERE.
@@ -551,20 +404,14 @@ def faster_lucas_kanade_step(I1: np.ndarray,
     else:
         I2_temp=np.uint8(I2)
         corners = cv2.goodFeaturesToTrack(I2_temp, maxCorners=50, qualityLevel=0.04, minDistance=10, blockSize=window_size,useHarrisDetector = True)
-
-
         corners = np.int0(corners)
         for corner in corners:
             x, y = corner.ravel()
-
             Ix_windowed=Ix[y-window_size//2:y+window_size//2+1,x-window_size//2:x+window_size//2+1]
             Iy_windowed=Iy[y-window_size//2:y+window_size//2+1,x-window_size//2:x+window_size//2+1]
             It_windowed=It[y-window_size//2:y+window_size//2+1,x-window_size//2:x+window_size//2+1]
-
-
             A = np.vstack((Ix_windowed.ravel(), Iy_windowed.ravel())).T  # [Ix_cs, Iy_cs]
             b = -It_windowed.ravel()  # -It_windowed_cols : -It[p1..pk]^T
-
             At_A = np.matmul(A.transpose(), A)  # A^T * A
             At_b = np.matmul(A.transpose(), b)  # A^T * A
             try:
@@ -572,7 +419,6 @@ def faster_lucas_kanade_step(I1: np.ndarray,
             except np.linalg.LinAlgError:
                 du[y][x], dv[y][x] = 0, 0
     return du, dv
-
 
 def faster_lucas_kanade_optical_flow(
         I1: np.ndarray, I2: np.ndarray, window_size: int, max_iter: int,
@@ -626,14 +472,11 @@ def faster_lucas_kanade_optical_flow(
             u += du
             v += dv
             I2_warped = warp_image(pyarmid_I2[level], u, v)
-
         if level > 0:
             dim = (2 * u.shape[1], 2 * u.shape[0])
             u = 2 * cv2.resize(u, dim)
             v = 2 * cv2.resize(v, dim)
-
     return u, v
-
 
 def lucas_kanade_faster_video_stabilization(
         input_video_path: str, output_video_path: str, window_size: int,
@@ -652,8 +495,6 @@ def lucas_kanade_faster_video_stabilization(
     cap, out = get_video_files(input_video_path, output_video_path, isColor=False)
     ret, prevframe = cap.read()
     prevframe = cv2.cvtColor(prevframe, cv2.COLOR_BGR2GRAY)
-    cv2.imwrite("frame%d.jpg" % 0, prevframe)
-    out.write(prevframe)
     K = int(np.ceil(prevframe.shape[0] / (2 ** (num_levels - 1))))
     M = int(np.ceil(prevframe.shape[1] / (2 ** (num_levels - 1))))
     M *= int(2 ** (num_levels - 1))
@@ -672,8 +513,6 @@ def lucas_kanade_faster_video_stabilization(
             next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
             if next_frame.shape != IMAGE_SIZE:
                 next_frame = cv2.resize(next_frame, IMAGE_SIZE)
-
-
             (u, v) = faster_lucas_kanade_optical_flow(prevframe, next_frame, window_size, max_iter, num_levels)
             u, v = np.ones(u.shape) * np.average(u[u!=0]), np.ones(v.shape) * np.average(v[v!=0])
             if u.shape != IMAGE_SIZE:
@@ -683,29 +522,19 @@ def lucas_kanade_faster_video_stabilization(
             output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
             output_frame = cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
             array_of_frame.append(output_frame)
-            # print frame as a jpg
-
-            cv2.imwrite("frame_f%d.jpg" % (i ), output_frame)
-            #read frame from jpg
-            frame_out=cv2.imread("frame_f%d.jpg" % (i ))
-            #delete frame file
-            #os.remove("frame_f%d.jpg" % (i ))
-            out.write(np.uint8(frame_out))
+            # print frame as a jpg#todo:delete
+            cv2.imwrite("result_temp/frame_f%d.jpg" % (i ), output_frame)#todo:delete
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
             break
-
-
-
-
+        # if(i==2):#todo:delete
+        #     break#todo:delete
         i += 1
     cap.release()
     out.release()
     cv2.destroyAllWindows()
     array_of_frame_to_avi_file(array_of_frame, output_video_path)
-
-
     return None
 
 def lucas_kanade_faster_video_stabilization_fix_effects(
@@ -727,10 +556,9 @@ def lucas_kanade_faster_video_stabilization_fix_effects(
         None.
     """
     """INSERT YOUR CODE HERE."""
-    cap, out = get_video_files(input_video_path, output_video_path, isColor=False)
+    lucas_kanade_faster_video_stabilization(input_video_path,  output_video_path, window_size,  max_iter,num_levels)
+    cap, out = get_video_files(output_video_path, output_video_path, isColor=False)
     ret, prevframe = cap.read()
-    #prevframe = cv2.cvtColor(prevframe, cv2.COLOR_BGR2GRAY)
-    #out.write(np.uint8(prevframe))
     K = int(np.ceil(prevframe.shape[0] / (2 ** (num_levels - 1))))
     M=int(np.ceil(prevframe.shape[1] / (2 ** (num_levels - 1))))
     M *= int(2 ** (num_levels - 1))
@@ -749,6 +577,6 @@ def lucas_kanade_faster_video_stabilization_fix_effects(
     return None
 
 
-# lst=read_frame_as_a_jpg_file_to_array(15)
-# array_of_frame_to_avi_file(lst,"test.avi")
-# lucas_kanade_faster_video_stabilization_fix_effects("test.avi","outpot_fix_test.avi", 3, 11,5)
+# lst=read_frame_as_a_jpg_file_to_array(78)#todo:delete
+# array_of_frame_to_avi_file(lst,"test.avi")#todo:delete
+# lucas_kanade_faster_video_stabilization_fix_effects("test.avi","outpot_fix_test.avi", 3, 11,5)#todo:delete

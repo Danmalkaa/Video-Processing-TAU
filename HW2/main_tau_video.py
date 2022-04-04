@@ -8,8 +8,8 @@ from lucas_kanade import lucas_kanade_video_stabilization, \
 
 
 # FILL IN YOUR ID
-ID1 = '123456789'
-ID2 = '313325938'
+ID1 = 304773591
+ID2 = 313325938
 
 # Choose parameters
 WINDOW_SIZE_TAU = 5  # Add your value here!
@@ -55,22 +55,17 @@ def calc_mean_mse_video(path: str) -> float:
 # Load video file
 input_video_name = 'input.avi'
 
-# output_video_name = f'{ID1}_{ID2}_stabilized_video.avi'
-# start_time = time.time()
-# lucas_kanade_video_stabilization(input_video_name,
-#                                  output_video_name,
-#                                  WINDOW_SIZE_TAU,
-#                                  MAX_ITER_TAU,
-#                                  NUM_LEVELS_TAU)
-# end_time = time.time()
-# print(f'LK-Video Stabilization Taking all pixels into account took: '
-#       f'{end_time - start_time:.2f}[sec]')
-# statistics["[TAU, TIME] naive LK implementation"] = end_time - start_time
-# print("The Following MSE values should make sense to you:")
-# original_mse = calc_mean_mse_video(input_video_name)
-# print(f"Mean MSE between frames for original video: {original_mse:.2f}")
-
-
+output_video_name = f'{ID1}_{ID2}_stabilized_video.avi'
+start_time = time.time()
+lucas_kanade_video_stabilization(input_video_name,
+                                 output_video_name,
+                                 WINDOW_SIZE_TAU,
+                                 MAX_ITER_TAU,
+                                 NUM_LEVELS_TAU)
+end_time = time.time()
+print(f'LK-Video Stabilization Taking all pixels into account took: '
+      f'{end_time - start_time:.2f}[sec]')
+statistics["[TAU, TIME] naive LK implementation"] = end_time - start_time
 
 faster_output_video_name = f'{ID1}_{ID2}_faster_stabilized_video.avi'
 start_time = time.time()
@@ -83,11 +78,6 @@ end_time = time.time()
 print(f'LK-Video Stabilization FASTER implementation took: '
       f'{end_time - start_time:.2f}[sec]')
 statistics["[TAU, TIME] FASTER LK implementation"] = end_time - start_time
-
-print("The Following MSE values should make sense to you:")
-original_mse = calc_mean_mse_video(input_video_name)
-print(f"Mean MSE between frames for original video: {original_mse:.2f}")
-
 
 fixed_image_borders_output_video_name = f'{ID1}_{ID2}_' \
                                         f'fixed_borders_stabilized_video.avi'
