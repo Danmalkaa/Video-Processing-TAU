@@ -23,7 +23,15 @@ X_DERIVATIVE_FILTER = np.array([[1, 0, -1],
 Y_DERIVATIVE_FILTER = X_DERIVATIVE_FILTER.copy().transpose()
 
 WINDOW_SIZE = 5
-
+def get_video_files(path, output_name, isColor):
+    cap = cv2.VideoCapture(path)
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')  # Define video codec
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    out_size = (width, height)
+    out = cv2.VideoWriter(output_name, fourcc, fps, out_size, isColor=isColor)
+    return cap, out
 def read_frame_as_a_jpg_file_to_array(n):
     """
 
@@ -38,15 +46,41 @@ def read_frame_as_a_jpg_file_to_array(n):
 
         lst.append(img)
     return lst
-
-def array_of_frame_to_video_file(array_of_frames, output_video_path,n):
-
+def array_of_frame_to_avi_file(array_of_frames, output_video_path):
+    """
+    :param array_of_frames:
+    :param output_video_path:
+    :return:
+    """
+    # Define the codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter(output_video_path, fourcc, 30.0, (array_of_frames[0].shape[1], array_of_frames[0].shape[0]))
+    out = cv2.VideoWriter(output_video_path, fourcc, 20.0, (640, 480))
     for i in range(len(array_of_frames)):
-        #out.write(array_of_frames[i])
+        #resize the frame
+        array_of_frames[i] = cv2.resize(array_of_frames[i], (640, 480))
+
+        # write the flipped frame
+        out.write(array_of_frames[i])
+    out.release()
+    return None
+def array_of_frame_to_video_file(array_of_frames, output_video_path,input_video_path):
+    cap,out = get_video_files(input_video_path, output_video_path, isColor=False)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    out_size = (height,width)
+    for i in range(2,len(array_of_frames)):
+        array_of_frames[i]=cv2.resize(array_of_frames[i], out_size)
+        #show the frame
+        # cv2.imshow('frame',array_of_frames[i])
+        #
+        # cv2.waitKey(0)
         out.write(np.uint8(array_of_frames[i]))
     out.release()
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+
     return None
 def get_video_parameters(capture: cv2.VideoCapture) -> dict:
     """Get an OpenCV capture object and extract its parameters.
@@ -168,7 +202,7 @@ def lucas_kanade_step(I1: np.ndarray,
 
 
     end_time = time.time()
-    print(f"LK Step took {end_time - start_time:.3f} sec")
+
 
     return du, dv
 
@@ -371,15 +405,7 @@ def lucas_kanade_optical_flow(I1: np.ndarray,
             v = 2 * cv2.resize(v, dim)
     return u, v
 
-def get_video_files(path, output_name, isColor):
-    cap = cv2.VideoCapture(path)
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')  # Define video codec
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    out_size = (width, height)
-    out = cv2.VideoWriter(output_name, fourcc, fps, out_size, isColor=isColor)
-    return cap, out
+
 
 def lucas_kanade_video_stabilization(input_video_path: str,
                                      output_video_path: str,
@@ -462,24 +488,29 @@ def lucas_kanade_video_stabilization(input_video_path: str,
                 v=cv2.resize(v, IMAGE_SIZE)
             output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
             output_frame= cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
-            frame_array.append(output_frame)
+
+
             #print frame as a jpg
             cv2.imwrite("frame%d.jpg" % i, output_frame)
-
-            out.write(np.uint8(output_frame))
+            #read frame
+            frame_out=cv2.imread("frame%d.jpg" % i)
+            # delete frame file
+            # os.remove("frame%d.jpg" % (i ))
+            out.write(np.uint8(frame_out))
+            frame_array.append(frame_out)
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
             break
-        if (i == numberoffram2):
-            break
+
+
 
 
         i += 1
-    array_of_frame_to_video_file(frame_array, output_video_path,i)
     cap.release()
     out.release()
     cv2.destroyAllWindows()
+    array_of_frame_to_avi_file(frame_array, output_video_path)
     return None
 
 
@@ -513,11 +544,13 @@ def faster_lucas_kanade_step(I1: np.ndarray,
     Ix = signal.convolve2d(I2,X_DERIVATIVE_FILTER,mode='same',boundary='symm')
     Iy = signal.convolve2d(I2,Y_DERIVATIVE_FILTER,mode='same',boundary='symm')
     It = I2.astype('int16') - I1.astype('int16')
-    if I1.shape[0]<=window_size or I1.shape[1]<=window_size:
+    if I1.shape[0]<=(window_size*10) or I1.shape[1]<=(window_size*10):
         return lucas_kanade_step(I1, I2, window_size)
     else:
         I2_temp=np.uint8(I2)
-        corners = cv2.goodFeaturesToTrack(I2_temp, maxCorners=100, qualityLevel=0.01, minDistance=10, blockSize=window_size)
+        corners = cv2.goodFeaturesToTrack(I2_temp, maxCorners=50, qualityLevel=0.04, minDistance=10, blockSize=window_size,useHarrisDetector = True)
+
+
         corners = np.int0(corners)
         for corner in corners:
             x, y = corner.ravel()
@@ -637,10 +670,10 @@ def lucas_kanade_faster_video_stabilization(
             next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
             if next_frame.shape != IMAGE_SIZE:
                 next_frame = cv2.resize(next_frame, IMAGE_SIZE)
-            temp_frame = next_frame.copy()
+
 
             (u, v) = faster_lucas_kanade_optical_flow(prevframe, next_frame, window_size, max_iter, num_levels)
-            u, v = np.ones(u.shape) * np.average(u), np.ones(v.shape) * np.average(v)
+            u, v = np.ones(u.shape) * np.average(u[u!=0]), np.ones(v.shape) * np.average(v[v!=0])
             if u.shape != IMAGE_SIZE:
                 u = cv2.resize(u, IMAGE_SIZE)
             if v.shape != IMAGE_SIZE:
@@ -651,23 +684,27 @@ def lucas_kanade_faster_video_stabilization(
             # print frame as a jpg
 
             cv2.imwrite("frame_f%d.jpg" % (i ), output_frame)
-            out.write(np.uint8(output_frame))
+            #read frame from jpg
+            frame_out=cv2.imread("frame_f%d.jpg" % (i ))
+            #delete frame file
+            #os.remove("frame_f%d.jpg" % (i ))
+            out.write(np.uint8(frame_out))
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
             break
-        if(i==numberoffram2):
-            break
+
 
 
 
         i += 1
-
     cap.release()
     out.release()
     cv2.destroyAllWindows()
-    return None
+    array_of_frame_to_avi_file(array_of_frame, output_video_path)
 
+
+    return None
 
 def lucas_kanade_faster_video_stabilization_fix_effects(
         input_video_path: str, output_video_path: str, window_size: int,
@@ -690,19 +727,26 @@ def lucas_kanade_faster_video_stabilization_fix_effects(
     """INSERT YOUR CODE HERE."""
     cap, out = get_video_files(input_video_path, output_video_path, isColor=False)
     ret, prevframe = cap.read()
-    prevframe = cv2.cvtColor(prevframe, cv2.COLOR_BGR2GRAY)
-    out.write(np.uint8(prevframe))
+    #prevframe = cv2.cvtColor(prevframe, cv2.COLOR_BGR2GRAY)
+    #out.write(np.uint8(prevframe))
     K = int(np.ceil(prevframe.shape[0] / (2 ** (num_levels - 1))))
     M=int(np.ceil(prevframe.shape[1] / (2 ** (num_levels - 1))))
-    if (prevframe.shape[0] - start_rows - end_rows) % 2 == 0:
-        M += 1
-    if (prevframe.shape[1] - start_cols - end_cols) % 2 == 0:
-        K += 1
     M *= int(2 ** (num_levels - 1))
     K *= int(2 ** (num_levels - 1))
-    IMAGE_SIZE = (K, M)
-    prevframe = cv2.resize(prevframe, IMAGE_SIZE)
-    prev_u, prev_v = np.zeros(IMAGE_SIZE), np.zeros(IMAGE_SIZE)
-    prev_u = cv2.resize(prev_u, IMAGE_SIZE)
+    IMAGE_SIZE = (M, K)
+    array_of_frame=[]
+    for i in tqdm(range(1, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))):
+        ret, frame = cap.read()
+        frame = frame[start_rows:prevframe.shape[0] - end_rows, start_cols:prevframe.shape[1] - end_cols,:]
+        frame = cv2.resize(frame, IMAGE_SIZE)
+        array_of_frame.append(frame)
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
+    array_of_frame_to_avi_file(array_of_frame, output_video_path)
+    return None
 
 
+lst=read_frame_as_a_jpg_file_to_array(64)
+array_of_frame_to_avi_file(lst,"test.avi")
+lucas_kanade_faster_video_stabilization_fix_effects("test.avi","outpot_fix_test.avi", 3, 11,5)
