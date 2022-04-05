@@ -518,6 +518,7 @@ def lucas_kanade_faster_video_stabilization(
             output_frame = cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
             array_of_frame.append(output_frame)
             # print frame as a jpg#todo:delete
+            # print frame as a jpg#todo:delete
             cv2.imwrite("result_temp/frame_f%d.jpg" % (i), output_frame)#todo:delete
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
