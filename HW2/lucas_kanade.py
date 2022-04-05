@@ -40,10 +40,7 @@ def read_frame_as_a_jpg_file_to_array(n):
     """
     lst = []
     for i in range(n):
-        #open a jpg file
-
         img = cv2.imread("frame_f%d.jpg" % i)
-
         lst.append(img)
     return lst
 def array_of_frame_to_avi_file(array_of_frames, output_video_path):
@@ -339,7 +336,6 @@ def lucas_kanade_video_stabilization(input_video_path: str,
     prev_u, prev_v = np.zeros(IMAGE_SIZE), np.zeros(IMAGE_SIZE)
     prev_u=cv2.resize(prev_u, IMAGE_SIZE)
     prev_v=cv2.resize(prev_v, IMAGE_SIZE)
-    i = 0
     frame_array=[]
     for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame "):
         ret, next_frame = cap.read()
@@ -504,7 +500,6 @@ def lucas_kanade_faster_video_stabilization(
     prev_u, prev_v = np.zeros(IMAGE_SIZE), np.zeros(IMAGE_SIZE)
     prev_u = cv2.resize(prev_u, IMAGE_SIZE)
     prev_v = cv2.resize(prev_v, IMAGE_SIZE)
-    i = 0
     array_of_frame=[]
     for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame "):
 
@@ -523,7 +518,7 @@ def lucas_kanade_faster_video_stabilization(
             output_frame = cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
             array_of_frame.append(output_frame)
             # print frame as a jpg#todo:delete
-            cv2.imwrite("result_temp/frame_f%d.jpg" % (i ), output_frame)#todo:delete
+            cv2.imwrite("result_temp/frame_f%d.jpg" % (i), output_frame)#todo:delete
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
@@ -556,8 +551,8 @@ def lucas_kanade_faster_video_stabilization_fix_effects(
         None.
     """
     """INSERT YOUR CODE HERE."""
-    lucas_kanade_faster_video_stabilization(input_video_path,  output_video_path, window_size,  max_iter,num_levels)
-    cap, out = get_video_files(output_video_path, output_video_path, isColor=False)
+    lucas_kanade_faster_video_stabilization(input_video_path,  "temp.avi", window_size,  max_iter,num_levels)
+    cap, out = get_video_files("temp.avi", output_video_path, isColor=False)
     ret, prevframe = cap.read()
     K = int(np.ceil(prevframe.shape[0] / (2 ** (num_levels - 1))))
     M=int(np.ceil(prevframe.shape[1] / (2 ** (num_levels - 1))))
