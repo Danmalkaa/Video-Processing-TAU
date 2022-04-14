@@ -28,10 +28,10 @@ s_initial = [297,  # x center
              0,  # velocity x
              0]  # velocity y
 MU = 0
-X = 2
-Y = 2
-X_V = 0.8
-Y_V = 0.8
+X = 3
+Y = 0.5
+X_V = 1.2
+Y_V = 0.5
 
 def predict_particles(s_prior: np.ndarray) -> np.ndarray:
     """Progress the prior state with time and add noise.
@@ -48,7 +48,8 @@ def predict_particles(s_prior: np.ndarray) -> np.ndarray:
     state_drifted = s_prior
     """ DELETE THE LINE ABOVE AND:
     INSERT YOUR CODE HERE."""
-    state_drifted[:2, :] = state_drifted[:2, :] + state_drifted[4:, :]
+    state_drifted[:2, :] = state_drifted[:2, :] + state_drifted[4:, :] # add x,y velocities
+
 
     state_drifted[:1, :] = state_drifted[:1, :] + \
                               np.round(np.random.normal(MU, X, size=(1, 100)))
