@@ -9,7 +9,7 @@ import matplotlib.patches as patches
 
 # change IDs to your IDs.
 ID1 = "313325938"
-ID2 = "987654321"
+ID2 = "304773591"
 
 ID = "HW3_{0}_{1}".format(ID1, ID2)
 RESULTS = 'results'
@@ -27,10 +27,10 @@ s_initial = [297,    # x center
                0,    # velocity x
                0]    # velocity y
 MU = 0
-X = 1
-Y = 1
-X_V = 1
-Y_V = 1
+X = 2
+Y = 2
+X_V = 0.8
+Y_V = 0.8
 
 def predict_particles(s_prior: np.ndarray) -> np.ndarray:
     """Progress the prior state with time and add noise.
@@ -47,7 +47,7 @@ def predict_particles(s_prior: np.ndarray) -> np.ndarray:
     state_drifted = s_prior
     """ DELETE THE LINE ABOVE AND:
     INSERT YOUR CODE HERE."""
-
+    state_drifted[:2, :] = state_drifted[:2, :] + state_drifted[4:, :]
 
     state_drifted[:1, :] = state_drifted[:1, :] + \
                               np.round(np.random.normal(MU, X, size=(1, 100)))
@@ -76,9 +76,9 @@ def compute_normalized_histogram(image: np.ndarray, state: np.ndarray) -> np.nda
     hist = np.zeros((1, 16 * 16 * 16))
     """ DELETE THE LINE ABOVE AND:
         INSERT YOUR CODE HERE."""
-    x, y, width, height, x_vel, y_vel = s_initial
+    x, y, width, height, x_vel, y_vel = state
 
-    temp_image = image[y - height:y + height, x - width:x + width]
+    temp_image = image[y - height:y + height+1, x - width:x + width+1,:]
 
     b, g, r = cv2.split(temp_image)
 
@@ -96,7 +96,7 @@ def compute_normalized_histogram(image: np.ndarray, state: np.ndarray) -> np.nda
 
 
     # normalize
-    hist = hist/sum(hist)
+    hist = hist/np.sum(hist)
 
     return hist
 
@@ -228,7 +228,7 @@ def main():
     # COMPUTE NORMALIZED WEIGHTS (W) AND PREDICTOR CDFS (C)
     # YOU NEED TO FILL THIS PART WITH CODE:
     """INSERT YOUR CODE HERE."""
-    q=compute_normalized_histogram(image, S)
+    # q=compute_normalized_histogram(image, S)
 
     C, _ = calc_C_weights(image, S, q)
 
