@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
 
+
 # change IDs to your IDs.
 ID1 = "313325938"
 ID2 = "304773591"
@@ -20,12 +21,12 @@ IMAGE_DIR_PATH = "Images"
 N = 100
 
 # Initial Settings
-s_initial = [297,    # x center
-             139,    # y center
-              16,    # half width
-              43,    # half height
-               0,    # velocity x
-               0]    # velocity y
+s_initial = [297,  # x center
+             139,  # y center
+             16,  # half width
+             43,  # half height
+             0,  # velocity x
+             0]  # velocity y
 MU = 0
 X = 2
 Y = 2
@@ -143,9 +144,6 @@ def bhattacharyya_distance(p: np.ndarray, q: np.ndarray) -> float:
     return distance
 
 
-
-
-
 def show_particles(image: np.ndarray, state: np.ndarray, W: np.ndarray, frame_index: int, ID: str,
                   frame_index_to_mean_state: dict, frame_index_to_max_state: dict,
                   ) -> tuple:
@@ -215,7 +213,10 @@ def calc_C_weights(image, particles_list, real_histogram):
     return C, weights
 
 
+
+
 def main():
+
     state_at_first_frame = np.matlib.repmat(s_initial, N, 1).T
     S = predict_particles(state_at_first_frame)
 
@@ -228,48 +229,34 @@ def main():
     # COMPUTE NORMALIZED WEIGHTS (W) AND PREDICTOR CDFS (C)
     # YOU NEED TO FILL THIS PART WITH CODE:
     """INSERT YOUR CODE HERE."""
-    # q=compute_normalized_histogram(image, S)
-
     C, _ = calc_C_weights(image, S, q)
-
-
     images_processed = 1
-
     # MAIN TRACKING LOOP
     image_name_list = os.listdir(IMAGE_DIR_PATH)
     image_name_list.sort()
     frame_index_to_avg_state = {}
     frame_index_to_max_state = {}
-    for image_name in image_name_list[1:]:
-
+    for image_name in sorted(image_name_list)[1:]:
         S_prev = S
-
         # LOAD NEW IMAGE FRAME
-        image_path = os.path.join(IMAGE_DIR_PATH, image_name)
+        image_path = IMAGE_DIR_PATH + os.sep + image_name
         current_image = cv2.imread(image_path)
-
         # SAMPLE THE CURRENT PARTICLE FILTERS
         S_next_tag = sample_particles(S_prev, C)
-
         # PREDICT THE NEXT PARTICLE FILTERS (YOU MAY ADD NOISE
         S = predict_particles(S_next_tag)
-
         # COMPUTE NORMALIZED WEIGHTS (W) AND PREDICTOR CDFS (C)
         # YOU NEED TO FILL THIS PART WITH CODE:
         """INSERT YOUR CODE HERE."""
-        C, W = calc_C_weights(image, S, q)
+        C, W = calc_C_weights(current_image, S, q)
         # CREATE DETECTOR PLOTS
         images_processed += 1
-        if 0 == images_processed%10:
+        if images_processed % 10 == 0:
             print("Processed image number: " + str(images_processed))
-            frame_index_to_avg_state, frame_index_to_max_state = show_particles(
-                current_image, S, W, images_processed, ID, frame_index_to_avg_state, frame_index_to_max_state)
-
+            frame_index_to_avg_state, frame_index_to_max_state = show_particles(current_image, S, W, images_processed, ID, frame_index_to_avg_state, frame_index_to_max_state)
     with open(os.path.join(RESULTS, 'frame_index_to_avg_state.json'), 'w') as f:
         json.dump(frame_index_to_avg_state, f, indent=4)
     with open(os.path.join(RESULTS, 'frame_index_to_max_state.json'), 'w') as f:
         json.dump(frame_index_to_max_state, f, indent=4)
-
-
 if __name__ == "__main__":
     main()
