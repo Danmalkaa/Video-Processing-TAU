@@ -181,7 +181,7 @@ def show_particles(image: np.ndarray, state: np.ndarray, W: np.ndarray, frame_in
     y_max = y_max - state[3][0]
     rect = patches.Rectangle((x_max, y_max), w_max, h_max, linewidth=1, edgecolor='r', facecolor='none')
     ax.add_patch(rect)
-    #plt.show(block=False)#todo:need to not del
+    plt.show(block=False)
 
     fig.savefig(os.path.join(RESULTS, ID + "-" + str(frame_index) + ".png"))
     frame_index_to_mean_state[frame_index] = [float(x) for x in [x_avg, y_avg, w_avg, h_avg]]
