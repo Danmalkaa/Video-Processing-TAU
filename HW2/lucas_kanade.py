@@ -204,7 +204,10 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     u_new += xx
     v_new += yy
     u_new, v_new = u_new.flatten(), v_new.flatten()
+    start = time.time()
     interpolation_result = griddata((xx.flatten(), yy.flatten()), image.flatten(), (u_new.flatten(), v_new.flatten()), method='linear', fill_value=np.nan)
+    end = time.time()
+    # print(f'{end - start:.4f}[sec]')
     image_warp = interpolation_result.reshape(image.shape)
     image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
     return image_warp
@@ -463,11 +466,23 @@ def faster_lucas_kanade_optical_flow(
        Replace u and v with their true value."""
     for level in tqdm(range(num_levels, -1, -1)):
         I2_warped = warp_image(pyarmid_I2[level], u, v)
+        I2_warped = np.reshape(I2_warped, pyramid_I1[level].shape)
         for k in range(max_iter):
             du, dv = faster_lucas_kanade_step(pyramid_I1[level], I2_warped, window_size)
             u += du
             v += dv
-            I2_warped = warp_image(pyarmid_I2[level], u, v)
+
+            # start = time.time()
+            if level <= 1:
+                u_ave, v_ave = np.average(u[u != 0]), np.average(v[v != 0])
+                transform = np.array([u_ave, v_ave])
+                transform = np.hstack((np.eye(2, 2), transform.reshape(2, 1)))
+                I2_warped = cv2.warpAffine(pyramid_I1[level], transform, pyramid_I1[level].shape)
+                I2_warped = np.reshape(I2_warped, pyramid_I1[level].shape)
+            else:
+                I2_warped = warp_image(pyarmid_I2[level], u, v)
+            # end = time.time()
+            # print(f'{end - start:.4f}[sec]')
         if level > 0:
             dim = (2 * u.shape[1], 2 * u.shape[0])
             u = 2 * cv2.resize(u, dim)
@@ -576,4 +591,4 @@ def lucas_kanade_faster_video_stabilization_fix_effects(
 
 # lst=read_frame_as_a_jpg_file_to_array(78)#todo:delete
 # array_of_frame_to_avi_file(lst,"test.avi")#todo:delete
-lucas_kanade_faster_video_stabilization_fix_effects("in.avi","outpot_fix_test_final.avi", 3, 5,4)#todo:delete
+# lucas_kanade_faster_video_stabilization_fix_effects("in.avi","outpot_fix_test_final.avi", 3, 5,4)#todo:delete
