@@ -43,7 +43,7 @@ def read_frame_as_a_jpg_file_to_array(n):
         img = cv2.imread("frame_f%d.jpg" % i)
         lst.append(img)
     return lst
-def array_of_frame_to_avi_file(array_of_frames, output_video_path):
+def array_of_frame_to_avi_file(array_of_frames, output_video_path,fps):
     """
     this function takes an array of frames and save it to an avi file
     :param array_of_frames:
@@ -53,7 +53,7 @@ def array_of_frame_to_avi_file(array_of_frames, output_video_path):
     # Define the codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
     frame_size=(array_of_frames[0].shape[1],array_of_frames[0].shape[0])
-    out = cv2.VideoWriter(output_video_path, fourcc, 20.0, frame_size)
+    out = cv2.VideoWriter(output_video_path, fourcc, fps, frame_size)
     for i in range(len(array_of_frames)):
         #resize the frame
         array_of_frames[i] = cv2.resize(np.uint8(array_of_frames[i]), frame_size)
@@ -163,6 +163,16 @@ def lucas_kanade_step(I1: np.ndarray,
     end_time = time.time()
     return du, dv
 
+def warp_image_eff(img, u,v,):
+    u_ave, v_ave = np.average(u[u != 0]), np.average(v[v != 0])
+    transform = np.array([u_ave, v_ave])
+    transform = np.hstack((np.eye(2, 2), transform.reshape(2, 1)))
+    I2_warped = cv2.warpAffine(img, transform, img.shape[0:2],cv2.INTER_LINEAR)
+    I2_warped = np.reshape(I2_warped, img.shape)
+    return I2_warped
+
+
+
 def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     """Warp image using the optical flow parameters in u and v.
     Note that this method needs to support the case where u and v shapes do
@@ -172,7 +182,7 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     (2) Then, normalize the shift values according to a factor. This factor
     is the ratio between the image dimension and the shift matrix (u or v)
     dimension (the factor for u should take into account the number of columns
-    in u and the factor for v should take into account the number of rows in v).
+    in u and the factor for v showarp_imageuld take into account the number of rows in v).
     As for the warping, use `scipy.interpolate`'s `griddata` method. Define the
     grid-points using a flattened version of the `meshgrid` of 0:w-1 and 0:h-1.
     The values here are simply image.flattened().
@@ -466,6 +476,7 @@ def faster_lucas_kanade_optical_flow(
        Replace u and v with their true value."""
     for level in tqdm(range(num_levels, -1, -1)):
         I2_warped = warp_image(pyarmid_I2[level], u, v)
+        # I2_warped = warp_image_eff(pyarmid_I2[level], u, v)
         I2_warped = np.reshape(I2_warped, pyramid_I1[level].shape)
         for k in range(max_iter):
             du, dv = faster_lucas_kanade_step(pyramid_I1[level], I2_warped, window_size)
@@ -505,7 +516,11 @@ def lucas_kanade_faster_video_stabilization(
     """INSERT YOUR CODE HERE."""
     cap, out = get_video_files(input_video_path, output_video_path, isColor=False)
     ret, prevframe = cap.read()
+    cap_color, out_color = get_video_files(input_video_path, output_video_path, isColor=True)
+    ret_color, prevframe_color = cap_color.read()
+
     prevframe = cv2.cvtColor(prevframe, cv2.COLOR_BGR2GRAY)
+    prevframe = cv2.resize(prevframe, (270,331), interpolation=cv2.INTER_CUBIC)
     K = int(np.ceil(prevframe.shape[0] / (2 ** (num_levels - 1))))
     M = int(np.ceil(prevframe.shape[1] / (2 ** (num_levels - 1))))
     M *= int(2 ** (num_levels - 1))
@@ -519,8 +534,11 @@ def lucas_kanade_faster_video_stabilization(
     for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame "):
 
         ret, next_frame = cap.read()
+        ret_color, next_frame_color = cap_color.read()
         if ret:
             next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
+            cv2.imwrite("result_temp/frame_old%d.jpg" % (i), next_frame)#todo:delete
+
             if next_frame.shape != IMAGE_SIZE:
                 next_frame = cv2.resize(next_frame, IMAGE_SIZE)
             (u, v) = faster_lucas_kanade_optical_flow(prevframe, next_frame, window_size, max_iter, num_levels)
@@ -529,8 +547,12 @@ def lucas_kanade_faster_video_stabilization(
                 u = cv2.resize(u, IMAGE_SIZE)
             if v.shape != IMAGE_SIZE:
                 v = cv2.resize(v, IMAGE_SIZE)
-            output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
-            output_frame = cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
+            # output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
+
+            # output_frame = warp_image_eff(next_frame, u + prev_u, v + prev_v)
+            output_frame = warp_image_eff(next_frame_color, u + prev_u, v + prev_v)
+
+            # output_frame = cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
             array_of_frame.append(output_frame)
             # print frame as a jpg#todo:delete
             # print frame as a jpg#todo:delete
@@ -545,8 +567,10 @@ def lucas_kanade_faster_video_stabilization(
         i += 1
     cap.release()
     out.release()
+    cap_color.release()
+    out_color.release()
     cv2.destroyAllWindows()
-    array_of_frame_to_avi_file(array_of_frame, output_video_path)
+    array_of_frame_to_avi_file(array_of_frame, output_video_path,cap.get(cv2.CAP_PROP_FPS))
     return None
 
 def lucas_kanade_faster_video_stabilization_fix_effects(
@@ -585,7 +609,7 @@ def lucas_kanade_faster_video_stabilization_fix_effects(
     cap.release()
     out.release()
     cv2.destroyAllWindows()
-    array_of_frame_to_avi_file(array_of_frame, output_video_path)
+    array_of_frame_to_avi_file(array_of_frame, output_video_path,cap.get(cv2.CAP_PROP_FPS))
     return None
 
 

@@ -54,6 +54,8 @@ def calc_mean_mse_video(path: str) -> float:
 
 # Load video file
 input_video_name = 'input.avi'
+input_video_name = 'INPUT2.avi'
+
 
 # output_video_name = f'{ID1}_{ID2}_stabilized_video.avi'
 # start_time = time.time()
