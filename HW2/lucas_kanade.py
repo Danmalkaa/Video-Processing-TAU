@@ -167,7 +167,7 @@ def warp_image_eff(img, u,v,):
     u_ave, v_ave = np.average(u[u != 0]), np.average(v[v != 0])
     transform = np.array([u_ave, v_ave])
     transform = np.hstack((np.eye(2, 2), transform.reshape(2, 1)))
-    I2_warped = cv2.warpAffine(img, transform, img.shape[0:2],cv2.INTER_LINEAR)
+    I2_warped = cv2.warpAffine(img, transform, img.shape[0:2][::-1],cv2.INTER_LINEAR)
     I2_warped = np.reshape(I2_warped, img.shape)
     return I2_warped
 
@@ -488,7 +488,7 @@ def faster_lucas_kanade_optical_flow(
                 u_ave, v_ave = np.average(u[u != 0]), np.average(v[v != 0])
                 transform = np.array([u_ave, v_ave])
                 transform = np.hstack((np.eye(2, 2), transform.reshape(2, 1)))
-                I2_warped = cv2.warpAffine(pyramid_I1[level], transform, pyramid_I1[level].shape)
+                I2_warped = cv2.warpAffine(pyramid_I1[level], transform, pyramid_I1[level].shape[::-1])
                 I2_warped = np.reshape(I2_warped, pyramid_I1[level].shape)
             else:
                 I2_warped = warp_image(pyarmid_I2[level], u, v)
@@ -531,17 +531,22 @@ def lucas_kanade_faster_video_stabilization(
     prev_u = cv2.resize(prev_u, IMAGE_SIZE)
     prev_v = cv2.resize(prev_v, IMAGE_SIZE)
     array_of_frame=[]
+    u_av, v_av = -1, -1
+    last_u_av, last_v_av = 0, 0
     for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame "):
 
         ret, next_frame = cap.read()
         ret_color, next_frame_color = cap_color.read()
         if ret:
+            # if i % 5 == 0 or np.abs(u_av - last_u_av) >= 0.75 or np.abs(v_av - last_v_av) >= 0.75:
+            last_u_av, last_v_av = u_av, v_av
             next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
             cv2.imwrite("result_temp/frame_old%d.jpg" % (i), next_frame)#todo:delete
 
             if next_frame.shape != IMAGE_SIZE:
                 next_frame = cv2.resize(next_frame, IMAGE_SIZE)
             (u, v) = faster_lucas_kanade_optical_flow(prevframe, next_frame, window_size, max_iter, num_levels)
+            u_av, v_av = 5*np.average(u[u!=0]), 5*np.average(v[v!=0])
             u, v = np.ones(u.shape) * np.average(u[u!=0]), np.ones(v.shape) * np.average(v[v!=0])
             if u.shape != IMAGE_SIZE:
                 u = cv2.resize(u, IMAGE_SIZE)
@@ -550,7 +555,7 @@ def lucas_kanade_faster_video_stabilization(
             # output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
 
             # output_frame = warp_image_eff(next_frame, u + prev_u, v + prev_v)
-            output_frame = warp_image_eff(next_frame_color, u + prev_u, v + prev_v)
+            output_frame = warp_image_eff(next_frame_color, 5*(u + prev_u), 5*(v + prev_v))
 
             # output_frame = cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
             array_of_frame.append(output_frame)
@@ -560,17 +565,29 @@ def lucas_kanade_faster_video_stabilization(
             cv2.imwrite("result_temp/frame_new%d.jpg" % (i), output_frame)#todo:delete
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
+            # else:
+            #     next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
+            #     cv2.imwrite("result_temp/frame_old%d.jpg" % (i), next_frame)#todo:delete
+            #
+            #     if next_frame.shape != IMAGE_SIZE:
+            #         next_frame = cv2.resize(next_frame, IMAGE_SIZE)
+            #     output_frame = warp_image_eff(next_frame_color, u + prev_u, v + prev_v)
+            #     array_of_frame.append(output_frame)
+            #
+            #     cv2.imwrite("result_temp/frame_new%d.jpg" % (i), output_frame)#todo:delete
+            #     prevframe = next_frame
+
         else:
             break
         # if(i==2):#todo:delete
         #     break#todo:delete
         i += 1
+    array_of_frame_to_avi_file(array_of_frame, output_video_path,cap_color.get(cv2.CAP_PROP_FPS))
     cap.release()
     out.release()
     cap_color.release()
     out_color.release()
     cv2.destroyAllWindows()
-    array_of_frame_to_avi_file(array_of_frame, output_video_path,cap.get(cv2.CAP_PROP_FPS))
     return None
 
 def lucas_kanade_faster_video_stabilization_fix_effects(
