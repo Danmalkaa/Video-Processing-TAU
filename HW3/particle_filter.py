@@ -9,7 +9,7 @@ import matplotlib.patches as patches
 
 
 # change IDs to your IDs.
-ID1 = "313325938"
+ID1 = "313325931"
 ID2 = "304773591"
 
 ID = "HW3_{0}_{1}".format(ID1, ID2)
@@ -212,8 +212,6 @@ def calc_C_weights(image, particles_list, real_histogram):
         C[i] = weights[i] + C[i - 1]
 
     return C, weights
-
-
 
 
 def main():

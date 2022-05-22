@@ -1,0 +1,3 @@
+22/05/2022 13:52:34 Starting Video Stabilization
+22/05/2022 13:53:09 Finished Video Stabilization
+22/05/2022 13:53:09 Starting Background Subtraction

@@ -399,7 +399,7 @@ def faster_lucas_kanade_step(I1: np.ndarray,
         return lucas_kanade_step(I1, I2, window_size)
     else:
         I2_temp=np.uint8(I2)
-        corners = cv2.goodFeaturesToTrack(I2_temp, maxCorners=50, qualityLevel=0.04, minDistance=10, blockSize=window_size,useHarrisDetector = True)
+        corners = cv2.goodFeaturesToTrack(I2_temp, maxCorners=200, qualityLevel=0.01, minDistance=10, blockSize=window_size,useHarrisDetector = True)
         corners = np.int0(corners)
         for corner in corners:
             x, y = corner.ravel()
@@ -519,7 +519,8 @@ def lucas_kanade_faster_video_stabilization(
             array_of_frame.append(output_frame)
             # print frame as a jpg#todo:delete
             # print frame as a jpg#todo:delete
-            cv2.imwrite("result_temp/frame_f%d.jpg" % (i), output_frame)#todo:delete
+
+            cv2.imwrite("result_temp/frame_new%d.jpg" % (i), output_frame)#todo:delete
             prev_u, prev_v = u + prev_u, v + prev_v
             prevframe = next_frame
         else:
@@ -575,4 +576,4 @@ def lucas_kanade_faster_video_stabilization_fix_effects(
 
 # lst=read_frame_as_a_jpg_file_to_array(78)#todo:delete
 # array_of_frame_to_avi_file(lst,"test.avi")#todo:delete
-# lucas_kanade_faster_video_stabilization_fix_effects("test.avi","outpot_fix_test.avi", 3, 11,5)#todo:delete
+lucas_kanade_faster_video_stabilization_fix_effects("in.avi","outpot_fix_test_final.avi", 3, 5,4)#todo:delete
