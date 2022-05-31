@@ -1,7 +1,8 @@
 import logging
 import cv2
-import tqdm
+from tqdm import tqdm
 import numpy as np
+import time
 ID1 = 304773591
 ID2 = 313325938
 from constants import (
@@ -23,49 +24,26 @@ from utils import (
     write_video,
     release_video_files,
     disk_kernel,
-    choose_indices_for_foreground,
-    choose_indices_for_background,
     new_estimate_pdf,
-    check_in_dict, scale_matrix_0_to_255
+    check_in_dict, scale_matrix_0_to_255,choose_indices_for_foreground,choose_indices_for_background
 )
+def choosIndicesForBackgroundAndForeground(mask, number_of_choices,b_or_f):
+    indices = np.where(mask == b_or_f)
+    if len(indices[0]) == 0:
+        return np.column_stack((indices[0],indices[1]))
+    indices_choices = np.random.choice(len(indices[0]), number_of_choices)
+    return np.column_stack((indices[0][indices_choices], indices[1][indices_choices]))
 
-my_logger = logging.getLogger('MyLogger')
 
 def backgroundSubTractorKNNStudyingFrameshistory(frames_hsv,mask_list,backSub):
-    for j in tqdm(range(8), desc='BackgroundSubtractorKNN: '):
+    for j in tqdm( range(5), desc="BackgroundSubtractorKNN Studying Frames history"):
         for index_frame, frame in enumerate(frames_hsv):
             frame_sv = frame[:, :, 1:]
-            fgMask = backSub.apply(frame_sv)
-            fgMask = (fgMask > 200).astype(np.uint8)
-            mask_list[index_frame] = fgMask
-
-def background_subtraction(input_video_path, output_video_path="extracted_{0}_{0}.avi".format(ID1,ID2)):
-    my_logger.info('Starting Background Subtraction')
-    # Read input video
-    cap, w, h, fps = get_video_files(path=input_video_path)
-    # Get frame count
-    frames_bgr = load_entire_video(cap, color_space='bgr')
-    frames_hsv = load_entire_video(cap, color_space='hsv')
-    n_frames = len(frames_bgr)
-
-    backSub = cv2.createBackgroundSubtractorKNN()
-    mask_list = np.zeros((n_frames, h, w)).astype(np.uint8)
-    print(f"[BS] - BackgroundSubtractorKNN Studying Frames history")
-    for j in range(8):
-        print(f"[BS] - BackgroundSubtractorKNN {j + 1} / 8 pass")
-        for index_frame, frame in enumerate(frames_hsv):
-            frame_sv = frame[:, :, 1:]
-            fgMask = backSub.apply(frame_sv)
-            fgMask = (fgMask > 200).astype(np.uint8)
-            mask_list[index_frame] = fgMask
-    print(f"[BS] - BackgroundSubtractorKNN Finished")
-
-    omega_f_colors, omega_b_colors = None, None
-    omega_f_shoes_colors, omega_b_shoes_colors = None, None
-    person_and_blue_mask_list = np.zeros((n_frames, h, w))
-    '''Collecting colors for building body & shoes KDEs'''
+            fg_Mask = backSub.apply(frame_sv)
+            fg_Mask = (fg_Mask > 200).astype(np.uint8)
+            mask_list[index_frame] = fg_Mask
+def collectingColorsBodyAndShoes(mask_list,frames_bgr,person_and_blue_mask_list,omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors):
     for frame_index, frame in enumerate(frames_bgr):
-        print(f"[BS] - Collecting colors for building body & shoes KDEs , Frame: {frame_index + 1} / {n_frames}")
         blue_frame, _, _ = cv2.split(frame)
         mask_for_frame = mask_list[frame_index].astype(np.uint8)
         mask_for_frame = cv2.morphologyEx(mask_for_frame, cv2.MORPH_CLOSE, disk_kernel(6))
@@ -98,6 +76,30 @@ def background_subtraction(input_video_path, output_video_path="extracted_{0}_{0
                 (omega_f_shoes_colors, frame[omega_f_shoes_indices[:, 0], omega_f_shoes_indices[:, 1], :]))
             omega_b_shoes_colors = np.concatenate(
                 (omega_b_shoes_colors, frame[omega_b_shoes_indices[:, 0], omega_b_shoes_indices[:, 1], :]))
+    return mask_list,frames_bgr,person_and_blue_mask_list,omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors
+def background_subtraction(input_video_path, output_video_path="extracted_{0}_{0}.avi".format(ID1,ID2)):
+    start_time= time.time()
+    # Read input video
+    cap, w, h, fps = get_video_files(path=input_video_path)
+    # Get frame count
+    frames_bgr = load_entire_video(cap, color_space='bgr')
+    frames_hsv = load_entire_video(cap, color_space='hsv')
+    n_frames = len(frames_bgr)
+
+    backSub = cv2.createBackgroundSubtractorKNN()#todo:check cv2.createBackgroundSubtractorKNN
+    mask_list = np.zeros((n_frames, h, w)).astype(np.uint8)
+    print(f"[BS] - BackgroundSubtractorKNN Studying Frames history")
+    backgroundSubTractorKNNStudyingFrameshistory(frames_hsv,mask_list,backSub)
+    print(f"[BS] - BackgroundSubtractorKNN Finished the time is: {time.time() - start_time}")
+
+    omega_f_colors, omega_b_colors = None, None
+    omega_f_shoes_colors, omega_b_shoes_colors = None, None
+    person_and_blue_mask_list = np.zeros((n_frames, h, w))
+
+    start_time_collecting_colors= time.time()
+    print("start Collecting colors for building body & shoes KDEs")
+    mask_list,frames_bgr,person_and_blue_mask_list,omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors=collectingColorsBodyAndShoes(mask_list,frames_bgr,person_and_blue_mask_list,omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors)
+    print(f"end  Collecting colors for building body & shoes KDEs the time is: {time.time() - start_time_collecting_colors}")
 
     foreground_pdf = new_estimate_pdf(omega_values=omega_f_colors, bw_method=BW_MEDIUM)
     background_pdf = new_estimate_pdf(omega_values=omega_b_colors, bw_method=BW_MEDIUM)
@@ -183,11 +185,12 @@ def background_subtraction(input_video_path, output_video_path="extracted_{0}_{0
         small_face_mask = face_mask[max(0, y_mean - FACE_WINDOW_HEIGHT // 2):min(h, y_mean + FACE_WINDOW_HEIGHT // 2),
                           max(0, x_mean - FACE_WINDOW_WIDTH // 2):min(w, x_mean + FACE_WINDOW_WIDTH // 2)]
 
-        small_face_mask = cv2.morphologyEx(small_face_mask, cv2.MORPH_OPEN, np.ones((20, 1), np.uint8))
+        small_face_mask = cv2.morphologyEx(small_face_mask, cv2.MORPH_OPEN, np.ones((20, 1), np.uint8))#todo: check morphologyEx
         small_face_mask = cv2.morphologyEx(small_face_mask, cv2.MORPH_OPEN, np.ones((1, 20), np.uint8))
 
-        omega_f_face_indices = choose_indices_for_foreground(small_face_mask, 20)
-        omega_b_face_indices = choose_indices_for_background(small_face_mask, 20)
+        omega_f_face_indices = choosIndicesForBackgroundAndForeground(small_face_mask, 20,1)
+        omega_b_face_indices = choosIndicesForBackgroundAndForeground(small_face_mask, 20,0)
+
         if omega_f_face_colors is None:
             omega_f_face_colors = small_frame_bgr[omega_f_face_indices[:, 0], omega_f_face_indices[:, 1], :]
             omega_b_face_colors = small_frame_bgr[omega_b_face_indices[:, 0], omega_b_face_indices[:, 1], :]
@@ -251,7 +254,6 @@ def background_subtraction(input_video_path, output_video_path="extracted_{0}_{0
         final_mask = np.copy(or_mask).astype(np.uint8)
         final_mask[max(0, y_mean - FACE_WINDOW_HEIGHT // 2):min(h, y_mean + FACE_WINDOW_HEIGHT // 2),
         max(0, x_mean - FACE_WINDOW_WIDTH // 2):min(w, x_mean + FACE_WINDOW_WIDTH // 2)] = small_contour_mask
-
         final_mask[max(0, y_mean - FACE_WINDOW_HEIGHT // 2):LEGS_HEIGHT, :] = cv2.morphologyEx(
             final_mask[max(0, y_mean - FACE_WINDOW_HEIGHT // 2):LEGS_HEIGHT, :], cv2.MORPH_OPEN,
             np.ones((6, 1), np.uint8))
@@ -272,7 +274,7 @@ def background_subtraction(input_video_path, output_video_path="extracted_{0}_{0
     print('~~~~~~~~~~~ [BS] FINISHED! ~~~~~~~~~~~')
     print('~~~~~~~~~~~ binary.avi has been created! ~~~~~~~~~~~')
     print('~~~~~~~~~~~ extracted.avi has been created! ~~~~~~~~~~~')
-    my_logger.info('Finished Background Subtraction')
+    print("the time of all is:" + str(time.time() - start_time))
 
     release_video_files(cap)
 def main():
