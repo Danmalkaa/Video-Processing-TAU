@@ -16,7 +16,8 @@ from constants import (
     WINDOW_WIDTH,
     BLUE_MASK_THR,
     FACE_WINDOW_HEIGHT,
-    FACE_WINDOW_WIDTH
+    FACE_WINDOW_WIDTH,
+    NUM_PIXEL
 )
 from utils import (
     get_video_files,
@@ -46,7 +47,7 @@ def choosIndicesForBackgroundAndForeground(mask, number_of_choices,b_or_f):
 
 
 def backgroundSubTractorKNNStudyingFrameshistory(frames_hsv,mask_list,backSub):
-    for j in tqdm( range(6), desc="BackgroundSubtractorKNN Studying Frames history"):
+    for j in tqdm( range(3), desc="BackgroundSubtractorKNN Studying Frames history"):
         for index_frame, frame in enumerate(frames_hsv):
             frame_sv = frame[:, :, 1:]
             fg_Mask = backSub.apply(frame_sv)
@@ -67,14 +68,14 @@ def collectingColorsBodyAndShoes(mask_list,frames_bgr,person_and_blue_mask_list,
         cv2.fillPoly(person_mask, pts=[contours[0]], color=1)#todo: check fillPoly
         blue_mask = (blue_frame < BLUE_MASK_THR).astype(np.uint8)
         person_and_blue_mask = (person_mask * blue_mask).astype(np.uint8)
-        omega_f_indices = choosIndicesForBackgroundAndForeground(person_and_blue_mask, 20,1)
-        omega_b_indices = choosIndicesForBackgroundAndForeground(person_and_blue_mask, 20,0)
+        omega_f_indices = choosIndicesForBackgroundAndForeground(person_and_blue_mask, NUM_PIXEL,1)
+        omega_b_indices = choosIndicesForBackgroundAndForeground(person_and_blue_mask, NUM_PIXEL,0)
         shoes_mask = np.copy(person_and_blue_mask)
         shoes_mask[:SHOES_HEIGHT, :] = 0
-        omega_f_shoes_indices = choosIndicesForBackgroundAndForeground(shoes_mask, 20,1)
+        omega_f_shoes_indices = choosIndicesForBackgroundAndForeground(shoes_mask, NUM_PIXEL,1)
         shoes_mask = np.copy(person_and_blue_mask)
         shoes_mask[:SHOES_HEIGHT - 120, :] = 1
-        omega_b_shoes_indices = choosIndicesForBackgroundAndForeground(shoes_mask, 20,0)
+        omega_b_shoes_indices = choosIndicesForBackgroundAndForeground(shoes_mask, NUM_PIXEL,0)
         person_and_blue_mask_list[frame_index] = person_and_blue_mask
         if omega_f_colors is None:
             omega_f_colors = frame[omega_f_indices[:, 0], omega_f_indices[:, 1], :]
@@ -88,7 +89,7 @@ def collectingColorsBodyAndShoes(mask_list,frames_bgr,person_and_blue_mask_list,
                 (omega_f_shoes_colors, frame[omega_f_shoes_indices[:, 0], omega_f_shoes_indices[:, 1], :]))
             omega_b_shoes_colors = np.concatenate(
                 (omega_b_shoes_colors, frame[omega_b_shoes_indices[:, 0], omega_b_shoes_indices[:, 1], :]))
-    return mask_list,frames_bgr,person_and_blue_mask_list,omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors
+    return (mask_list,frames_bgr,person_and_blue_mask_list,omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors)
 def FilteringKDEs(omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors,n_frames,h, w,frames_bgr,person_and_blue_mask_list):
     foreground_pdf = new_estimate_pdf(omega_values=omega_f_colors, bw_method=BW_MEDIUM)
     background_pdf = new_estimate_pdf(omega_values=omega_b_colors, bw_method=BW_MEDIUM)
@@ -264,7 +265,7 @@ def background_subtraction(input_video_path, output_video_path="../Temp/extracte
     frames_bgr = load_entire_video(cap, color_space='bgr')
     frames_hsv = load_entire_video(cap, color_space='hsv')
     n_frames = len(frames_bgr)
-    backSub = cv2.createBackgroundSubtractorKNN()
+    backSub = cv2.createBackgroundSubtractorKNN(detectShadows=False, history=3 * n_frames)
     mask_list = np.zeros((n_frames, h, w)).astype(np.uint8)
     print(f"[BS] - BackgroundSubtractorKNN Studying Frames history")
     backgroundSubTractorKNNStudyingFrameshistory(frames_hsv,mask_list,backSub)
@@ -276,7 +277,8 @@ def background_subtraction(input_video_path, output_video_path="../Temp/extracte
 
     start_time_collecting_colors= time.time()
     print("start Collecting colors for building body & shoes KDEs")
-    mask_list,frames_bgr,person_and_blue_mask_list,omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors=collectingColorsBodyAndShoes(mask_list,frames_bgr,person_and_blue_mask_list,omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors)
+    out = collectingColorsBodyAndShoes(mask_list,frames_bgr,person_and_blue_mask_list,omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors)
+    mask_list,frames_bgr,person_and_blue_mask_list,omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors = out
     print(f"end  Collecting colors for building body & shoes KDEs the time is: {time.time() - start_time_collecting_colors}")
 
 

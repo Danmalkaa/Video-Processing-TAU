@@ -103,6 +103,66 @@ def build_pyramid(image: np.ndarray, num_levels: int) -> list[np.ndarray]:
         pyramid[i + 1] = pyramid[i + 1][::2, ::2]
     return pyramid
 
+def warp_image_eff(img, u,v,):
+    u_ave, v_ave = np.average(u[u != 0]), np.average(v[v != 0])
+    transform = np.array([u_ave, v_ave])
+    transform = np.hstack((np.eye(2, 2), transform.reshape(2, 1)))
+    I2_warped = cv2.warpAffine(img, transform, img.shape[0:2][::-1],cv2.INTER_LINEAR)
+    I2_warped = np.reshape(I2_warped, img.shape)
+    return I2_warped
+
+
+
+def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
+    """Warp image using the optical flow parameters in u and v.
+    Note that this method needs to support the case where u and v shapes do
+    not share the same shape as of the image. We will update u and v to the
+    shape of the image. The way to do it, is to:
+    (1) cv2.resize to resize the u and v to the shape of the image.
+    (2) Then, normalize the shift values according to a factor. This factor
+    is the ratio between the image dimension and the shift matrix (u or v)
+    dimension (the factor for u should take into account the number of columns
+    in u and the factor for v showarp_imageuld take into account the number of rows in v).
+    As for the warping, use `scipy.interpolate`'s `griddata` method. Define the
+    grid-points using a flattened version of the `meshgrid` of 0:w-1 and 0:h-1.
+    The values here are simply image.flattened().
+    The points you wish to interpolate are, again, a flattened version of the
+    `meshgrid` matrices - don't forget to add them v and u.
+    Use `np.nan` as `griddata`'s fill_value.
+    Finally, fill the nan holes with the source image values.
+    Hint: For the final step, use np.isnan(image_warp).
+    Args:
+        image: np.ndarray. Image to warp.
+        u: np.ndarray. Optical flow parameters corresponding to the columns.
+        v: np.ndarray. Optical flow parameters corresponding to the rows.
+    Returns:
+        image_warp: np.ndarray. Warped image.
+    """
+    image_warp = image.copy()
+    """INSERT YOUR CODE HERE.
+    Replace image_warp with something else.
+    """
+    uv_list = [u.copy(),v.copy()]
+    for i, mat in enumerate([u,v]):
+        if image.shape != mat.shape:
+            factor = image.shape[1] / mat.shape[1]
+            uv_list[i] = cv2.resize(mat, image.T.shape) * factor
+    u_new, v_new = uv_list[0], uv_list[1]
+    y, x = image.shape
+    y, x = np.arange(y), np.arange(x)
+    xx, yy = np.meshgrid(x,y, indexing='xy')
+    u_new += xx
+    v_new += yy
+    u_new, v_new = u_new.flatten(), v_new.flatten()
+    start = time.time()
+    interpolation_result = griddata((xx.flatten(), yy.flatten()), image.flatten(), (u_new.flatten(), v_new.flatten()), method='linear', fill_value=np.nan)
+    end = time.time()
+    # print(f'{end - start:.4f}[sec]')
+    image_warp = interpolation_result.reshape(image.shape)
+    image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
+    return image_warp
+
+
 def lucas_kanade_step(I1: np.ndarray,
                       I2: np.ndarray,
                       window_size: int) -> tuple[np.ndarray, np.ndarray]:
@@ -163,64 +223,6 @@ def lucas_kanade_step(I1: np.ndarray,
     end_time = time.time()
     return du, dv
 
-def warp_image_eff(img, u,v,):
-    u_ave, v_ave = np.average(u[u != 0]), np.average(v[v != 0])
-    transform = np.array([u_ave, v_ave])
-    transform = np.hstack((np.eye(2, 2), transform.reshape(2, 1)))
-    I2_warped = cv2.warpAffine(img, transform, img.shape[0:2][::-1],cv2.INTER_LINEAR)
-    I2_warped = np.reshape(I2_warped, img.shape)
-    return I2_warped
-
-
-
-def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
-    """Warp image using the optical flow parameters in u and v.
-    Note that this method needs to support the case where u and v shapes do
-    not share the same shape as of the image. We will update u and v to the
-    shape of the image. The way to do it, is to:
-    (1) cv2.resize to resize the u and v to the shape of the image.
-    (2) Then, normalize the shift values according to a factor. This factor
-    is the ratio between the image dimension and the shift matrix (u or v)
-    dimension (the factor for u should take into account the number of columns
-    in u and the factor for v showarp_imageuld take into account the number of rows in v).
-    As for the warping, use `scipy.interpolate`'s `griddata` method. Define the
-    grid-points using a flattened version of the `meshgrid` of 0:w-1 and 0:h-1.
-    The values here are simply image.flattened().
-    The points you wish to interpolate are, again, a flattened version of the
-    `meshgrid` matrices - don't forget to add them v and u.
-    Use `np.nan` as `griddata`'s fill_value.
-    Finally, fill the nan holes with the source image values.
-    Hint: For the final step, use np.isnan(image_warp).
-    Args:
-        image: np.ndarray. Image to warp.
-        u: np.ndarray. Optical flow parameters corresponding to the columns.
-        v: np.ndarray. Optical flow parameters corresponding to the rows.
-    Returns:
-        image_warp: np.ndarray. Warped image.
-    """
-    image_warp = image.copy()
-    """INSERT YOUR CODE HERE.
-    Replace image_warp with something else.
-    """
-    uv_list = [u.copy(),v.copy()]
-    for i, mat in enumerate([u,v]):
-        if image.shape != mat.shape:
-            factor = image.shape[1] / mat.shape[1]
-            uv_list[i] = cv2.resize(mat, image.T.shape) * factor
-    u_new, v_new = uv_list[0], uv_list[1]
-    y, x = image.shape
-    y, x = np.arange(y), np.arange(x)
-    xx, yy = np.meshgrid(x,y, indexing='xy')
-    u_new += xx
-    v_new += yy
-    u_new, v_new = u_new.flatten(), v_new.flatten()
-    start = time.time()
-    interpolation_result = griddata((xx.flatten(), yy.flatten()), image.flatten(), (u_new.flatten(), v_new.flatten()), method='linear', fill_value=np.nan)
-    end = time.time()
-    # print(f'{end - start:.4f}[sec]')
-    image_warp = interpolation_result.reshape(image.shape)
-    image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
-    return image_warp
 
 def lucas_kanade_optical_flow(I1: np.ndarray,
                               I2: np.ndarray,
