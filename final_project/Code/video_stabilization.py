@@ -19,10 +19,12 @@ ID1 = 304773591
 ID2 = 313325938
 
 # Choose parameters
+# WINDOW_SIZE_TAU = 5  # Add your value here!
+# MAX_ITER_TAU = 4  # Add your value here!
+# NUM_LEVELS_TAU = 5  # Add your value here!
 WINDOW_SIZE_TAU = 5  # Add your value here!
-MAX_ITER_TAU = 4  # Add your value here!
-NUM_LEVELS_TAU = 5  # Add your value here!
-
+MAX_ITER_TAU = 5  # Add your value here!
+NUM_LEVELS_TAU = 6  # Add your value here!
 
 my_logger = logging.getLogger('MyLogger')
 
@@ -126,13 +128,26 @@ def build_pyramid(image: np.ndarray, num_levels: int) -> list[np.ndarray]:
         pyramid[i + 1] = pyramid[i + 1][::2, ::2]
     return pyramid
 
-def warp_image_eff(img, u,v,):
+def warp_image_eff(img, u,v, rot_flag = False):
     u_ave, v_ave = np.average(u[u != 0]), np.average(v[v != 0])
     transform = np.array([u_ave, v_ave])
     transform = np.hstack((np.eye(2, 2), transform.reshape(2, 1)))
+    if rot_flag:
+        da = np.arctan2(v_ave, u_ave)
+        transform[0, 0] = 1-0.1* np.cos(da)
+        transform[0, 1] = 0.1* -np.sin(da)
+        transform[1, 0] = 0.1* np.sin(da)
+        transform[1, 1] = 1 - 0.1* np.cos(da)
     I2_warped = cv2.warpAffine(img, transform, img.shape[0:2][::-1],cv2.INTER_LINEAR)
     I2_warped = np.reshape(I2_warped, img.shape)
     return I2_warped
+
+def get_transform(img, u,v):
+    u_ave, v_ave = np.average(u[u != 0]), np.average(v[v != 0])
+    transform = np.array([u_ave, v_ave])
+    transform = np.hstack((np.eye(2, 2), transform.reshape(2, 1)))
+
+    return transform
 
 
 
@@ -285,8 +300,12 @@ def faster_lucas_kanade_step(I1: np.ndarray,
         return lucas_kanade_step(I1, I2, window_size)
     else:
         I2_temp=np.uint8(I2)
-        corners = cv2.goodFeaturesToTrack(I2_temp, maxCorners=200, qualityLevel=0.01, minDistance=10, blockSize=window_size,useHarrisDetector = True)
-        corners = np.int0(corners)
+        corners = cv2.goodFeaturesToTrack(I2_temp, maxCorners=200, qualityLevel=0.01, minDistance=10, blockSize=window_size)
+        try:
+            corners = np.int0(corners)
+        except:
+            return du,dv
+
         for corner in corners:
             x, y = corner.ravel()
             Ix_windowed=Ix[y-window_size//2:y+window_size//2+1,x-window_size//2:x+window_size//2+1]
@@ -325,10 +344,10 @@ def faster_lucas_kanade_optical_flow(
         I1 = cv2.resize(I1, IMAGE_SIZE)
     if I2.shape != IMAGE_SIZE:
         I2 = cv2.resize(I2, IMAGE_SIZE)
-    pyramid_I1 = build_pyramid(I1, num_levels)  # create levels list for I1
-    pyarmid_I2 = build_pyramid(I2, num_levels)  # create levels list for I1
-    u = np.zeros(pyarmid_I2[-1].shape)  # create u in the size of smallest image
-    v = np.zeros(pyarmid_I2[-1].shape)  # create v in the size of smallest image
+    # pyramid_I1 = build_pyramid(I1, num_levels)  # create levels list for I1
+    # pyarmid_I2 = build_pyramid(I2, num_levels)  # create levels list for I1
+    # u = np.zeros(pyarmid_I2[-1].shape)  # create u in the size of smallest image
+    # v = np.zeros(pyarmid_I2[-1].shape)  # create v in the size of smallest image
     """INSERT YOUR CODE HERE.
     Replace u and v with their true value."""
     h_factor = int(np.ceil(I1.shape[0] / (2 ** (num_levels - 1 + 1))))
@@ -348,7 +367,11 @@ def faster_lucas_kanade_optical_flow(
     """INSERT YOUR CODE HERE.
        Replace u and v with their true value."""
     for level in range(num_levels, -1, -1):
-        I2_warped = warp_image(pyarmid_I2[level], u, v)
+        if level >= 2:
+            I2_warped = warp_image(pyarmid_I2[level], u, v)
+        else:
+            I2_warped = warp_image_eff(pyarmid_I2[level], u, v)
+
         # I2_warped = warp_image_eff(pyarmid_I2[level], u, v)
         I2_warped = np.reshape(I2_warped, pyramid_I1[level].shape)
         for k in range(max_iter):
@@ -356,22 +379,47 @@ def faster_lucas_kanade_optical_flow(
             u += du
             v += dv
 
-            # start = time.time()
-            if level <= 1:
+            start = time.time()
+            if level <= 2:
                 u_ave, v_ave = np.average(u[u != 0]), np.average(v[v != 0])
                 transform = np.array([u_ave, v_ave])
                 transform = np.hstack((np.eye(2, 2), transform.reshape(2, 1)))
+                # da = np.arctan2(v_ave, u_ave)
+                # transform[0, 0] = np.cos(da)
+                # transform[0, 1] = -np.sin(da)
+                # transform[1, 0] = np.sin(da)
+                # transform[1, 1] = np.cos(da)
                 I2_warped = cv2.warpAffine(pyramid_I1[level], transform, pyramid_I1[level].shape[::-1])
                 I2_warped = np.reshape(I2_warped, pyramid_I1[level].shape)
             else:
                 I2_warped = warp_image(pyarmid_I2[level], u, v)
-            # end = time.time()
+            end = time.time()
             # print(f'{end - start:.4f}[sec]')
         if level > 0:
             dim = (2 * u.shape[1], 2 * u.shape[0])
             u = 2 * cv2.resize(u, dim)
             v = 2 * cv2.resize(v, dim)
     return u, v
+
+def load_entire_video(cap, color_space='bgr'):
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frames = []
+    for i in range(n_frames):
+        success, curr = cap.read()
+        if not success:
+            break
+        if color_space == 'bgr':
+            frames.append(curr)
+        elif color_space == 'yuv':
+            frames.append(cv2.cvtColor(curr, cv2.COLOR_BGR2YUV))
+        elif color_space == 'bw':
+            frames.append(cv2.cvtColor(curr, cv2.COLOR_BGR2GRAY))
+        else:
+            frames.append(cv2.cvtColor(curr, cv2.COLOR_BGR2HSV))
+        continue
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    return np.asarray(frames)
 
 def lucas_kanade_faster_video_stabilization(
         input_video_path: str, output_video_path: str, window_size: int,
@@ -404,59 +452,141 @@ def lucas_kanade_faster_video_stabilization(
     prev_u = cv2.resize(prev_u, IMAGE_SIZE)
     prev_v = cv2.resize(prev_v, IMAGE_SIZE)
     array_of_frame=[]
+
     u_av, v_av = -1, -1
     last_u_av, last_v_av = 0, 0
-    for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame "):
 
-        ret, next_frame = cap.read()
-        ret_color, next_frame_color = cap_color.read()
-        if ret:
-            # if i % 5 == 0 or np.abs(u_av - last_u_av) >= 0.75 or np.abs(v_av - last_v_av) >= 0.75:
-            last_u_av, last_v_av = u_av, v_av
-            next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
-            cv2.imwrite("result_temp/frame_old%d.jpg" % (i), next_frame)#todo:delete
+    frames_bgr = load_entire_video(cap_color, color_space='bgr')
+    frames_bw = load_entire_video(cap, color_space='bw')
 
-            if next_frame.shape != IMAGE_SIZE:
-                next_frame = cv2.resize(next_frame, IMAGE_SIZE)
-            (u, v) = faster_lucas_kanade_optical_flow(prevframe, next_frame, window_size, max_iter, num_levels)
-            scale_u, scale_v = prevframe_color.shape[0]/270.0 , prevframe_color.shape[0]/331.0
-            u_av, v_av = scale_u*np.average(u[u!=0]), scale_v*np.average(v[v!=0])
-            u, v = np.ones(u.shape) * u_av, np.ones(v.shape) * v_av
-            if u.shape != IMAGE_SIZE:
-                u = cv2.resize(u, IMAGE_SIZE)
-            if v.shape != IMAGE_SIZE:
-                v = cv2.resize(v, IMAGE_SIZE)
-            # output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
+    # Pre-define transformation-store array
+    transforms = np.zeros((len(frames_bgr) , 2), np.float32)
 
-            # output_frame = warp_image_eff(next_frame, u + prev_u, v + prev_v)
-            output_frame = warp_image_eff(next_frame_color, (u + prev_u), (v + prev_v))
-            output_frame = fixBorder(output_frame) #TODO: test
+    # for i in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc=f"frame "):
+    for i, next_frame_color in tqdm(enumerate(frames_bgr), desc=f"frame "):
+        if i == 0:
+            continue
+        next_frame = frames_bw[i]
+        # ret, next_frame = cap.read()
+        # ret_color, next_frame_color = cap_color.read()
 
-            # output_frame = cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
-            array_of_frame.append(output_frame)
-            # print frame as a jpg#todo:delete
-            # print frame as a jpg#todo:delete
+        # if ret:
+        # if i % 5 == 0 or np.abs(u_av - last_u_av) >= 0.75 or np.abs(v_av - last_v_av) >= 0.75:
+        last_u_av, last_v_av = u_av, v_av
+        # next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
+        # cv2.imwrite("result_temp/frame_old%d.jpg" % (i), next_frame)#todo:delete
 
-            cv2.imwrite("result_temp/frame_new%d.jpg" % (i), output_frame)#todo:delete
-            prev_u, prev_v = u + prev_u, v + prev_v
-            prevframe = next_frame
-            # else:
-            #     next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
-            #     cv2.imwrite("result_temp/frame_old%d.jpg" % (i), next_frame)#todo:delete
-            #
-            #     if next_frame.shape != IMAGE_SIZE:
-            #         next_frame = cv2.resize(next_frame, IMAGE_SIZE)
-            #     output_frame = warp_image_eff(next_frame_color, u + prev_u, v + prev_v)
-            #     array_of_frame.append(output_frame)
-            #
-            #     cv2.imwrite("result_temp/frame_new%d.jpg" % (i), output_frame)#todo:delete
-            #     prevframe = next_frame
+        if next_frame.shape != IMAGE_SIZE:
+            next_frame = cv2.resize(next_frame, IMAGE_SIZE)
+        (u, v) = faster_lucas_kanade_optical_flow(prevframe, next_frame, window_size, max_iter, num_levels)
+        scale_u, scale_v = prevframe_color.shape[0]/270.0 , prevframe_color.shape[0]/331.0
+        u_av, v_av = scale_u*np.average(u[u!=0]), scale_v*np.average(v[v!=0])
+        u, v = np.ones(u.shape) * u_av, np.ones(v.shape) * v_av
+        if u.shape != IMAGE_SIZE:
+            u = cv2.resize(u, IMAGE_SIZE)
+        if v.shape != IMAGE_SIZE:
+            v = cv2.resize(v, IMAGE_SIZE)
+        # output_frame = warp_image(next_frame, u + prev_u, v + prev_v)
 
-        else:
-            break
+        # output_frame = warp_image_eff(next_frame, u + prev_u, v + prev_v)
+        # output_frame = warp_image_eff(next_frame_color, (u + prev_u), (v + prev_v), rot_flag=True)
+
+        trans = get_transform(next_frame_color, (u + prev_u), (v + prev_v))
+        # Extract traslation
+        dx = trans[0, 2]
+        dy = trans[1, 2]
+
+        # Extract rotation angle
+        # da = np.arctan2(trans[1, 0], trans[0, 0])
+
+        transforms[i] = [dx,dy]
+
+        # output_frame = fixBorder(output_frame) #TODO: test
+
+        # output_frame = cv2.resize(output_frame, (prevframe.shape[1], prevframe.shape[0]))
+        # array_of_frame.append(output_frame)
+        # print frame as a jpg#todo:delete
+        # print frame as a jpg#todo:delete
+
+        # cv2.imwrite("result_temp/frame_new%d.jpg" % (i), output_frame)#todo:delete
+        prev_u, prev_v = u + prev_u, v + prev_v
+        prevframe = next_frame
+        # else:
+        #     next_frame = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
+        #     cv2.imwrite("result_temp/frame_old%d.jpg" % (i), next_frame)#todo:delete
+        #
+        #     if next_frame.shape != IMAGE_SIZE:
+        #         next_frame = cv2.resize(next_frame, IMAGE_SIZE)
+        #     output_frame = warp_image_eff(next_frame_color, u + prev_u, v + prev_v)
+        #     array_of_frame.append(output_frame)
+        #
+        #     cv2.imwrite("result_temp/frame_new%d.jpg" % (i), output_frame)#todo:delete
+        #     prevframe = next_frame
+
+        # else:
+        #     break
         # if(i==2):#todo:delete
         #     break#todo:delete
-        i += 1
+        # i += 1
+
+
+    # The larger the more stable the video, but less reactive to sudden panning
+    SMOOTHING_RADIUS = 50
+    def movingAverage(curve, radius):
+        window_size = 2 * radius + 1
+        # Define the filter
+        f = np.ones(window_size) / window_size
+        # Add padding to the boundaries
+        curve_pad = np.lib.pad(curve, (radius, radius), 'edge')
+        # Apply convolution
+        curve_smoothed = np.convolve(curve_pad, f, mode='same')
+        # Remove padding
+        curve_smoothed = curve_smoothed[radius:-radius]
+        # return smoothed curve
+        return curve_smoothed
+
+    def smooth(trajectory):
+        smoothed_trajectory = np.copy(trajectory)
+        # Filter the x, y and angle curves
+        for i in range(2):
+            smoothed_trajectory[:, i] = movingAverage(trajectory[:, i], radius=SMOOTHING_RADIUS)
+
+        return smoothed_trajectory
+    # Compute trajectory using cumulative sum of transformations
+    trajectory = np.cumsum(transforms, axis=0)
+
+    # Create variable to store smoothed trajectory
+    smoothed_trajectory = smooth(trajectory)
+
+    # Calculate difference in smoothed_trajectory and trajectory
+    difference = smoothed_trajectory - trajectory
+
+    # Calculate newer transformation array
+    transforms_smooth = transforms + difference
+
+    for i, transform in enumerate(transforms):
+        # Extract transformations from the new transformation array
+        dx = transforms_smooth[i, 0]
+        dy = transforms_smooth[i, 1]
+        # da = transforms_smooth[i, 2]
+
+        # Reconstruct transformation matrix accordingly to new values
+        m = np.zeros((2, 3), np.float32)
+        m[0, 0] = 1
+        m[0, 1] = 0
+        m[1, 0] = 0
+        m[1, 1] = 1
+        m[0, 2] = dx
+        m[1, 2] = dy
+
+        # Apply affine wrapping to the given frame
+        frame_stabilized = cv2.warpAffine(frames_bgr[i], m, frames_bgr[i].shape[0:2][::-1], cv2.INTER_LINEAR)
+
+        # Fix border artifacts
+        frame_stabilized = fixBorder(frame_stabilized)
+
+        array_of_frame.append(frame_stabilized)
+
     array_of_frame_to_avi_file(array_of_frame, output_video_path,cap_color.get(cv2.CAP_PROP_FPS))
     cap.release()
     out.release()
@@ -609,6 +739,8 @@ def lucas_kanade_faster_video_stabilization(
 #
 # def main():
 #     stabilize_video('../Temp/INPUT.avi')
+
+
 
 def main():
     # Load video file
