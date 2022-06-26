@@ -5,6 +5,7 @@ from tqdm import tqdm
 from scipy import signal
 from scipy.interpolate import griddata
 import time
+import os
 
 # ID1 = 304773591
 # ID2 = 313325938
@@ -22,9 +23,9 @@ ID2 = 313325938
 # WINDOW_SIZE_TAU = 5  # Add your value here!
 # MAX_ITER_TAU = 4  # Add your value here!
 # NUM_LEVELS_TAU = 5  # Add your value here!
-WINDOW_SIZE_TAU = 5  # Add your value here!
-MAX_ITER_TAU = 5  # Add your value here!
-NUM_LEVELS_TAU = 6  # Add your value here!
+WINDOW_SIZE_TAU = 9  # Add your value here!
+MAX_ITER_TAU = 4  # Add your value here!
+NUM_LEVELS_TAU = 5  # Add your value here!
 
 my_logger = logging.getLogger('MyLogger')
 
@@ -78,7 +79,7 @@ def array_of_frame_to_avi_file(array_of_frames, output_video_path,fps):
     # Define the codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
     frame_size=(array_of_frames[0].shape[1],array_of_frames[0].shape[0])
-    out = cv2.VideoWriter(output_video_path, fourcc, fps, frame_size)
+    out = cv2.VideoWriter(output_video_path, fourcc, fps, frame_size, isColor=True)
     for i in range(len(array_of_frames)):
         #resize the frame
         array_of_frames[i] = cv2.resize(np.uint8(array_of_frames[i]), frame_size)
@@ -134,10 +135,10 @@ def warp_image_eff(img, u,v, rot_flag = False):
     transform = np.hstack((np.eye(2, 2), transform.reshape(2, 1)))
     if rot_flag:
         da = np.arctan2(v_ave, u_ave)
-        transform[0, 0] = 1-0.1* np.cos(da)
-        transform[0, 1] = 0.1* -np.sin(da)
-        transform[1, 0] = 0.1* np.sin(da)
-        transform[1, 1] = 1 - 0.1* np.cos(da)
+        transform[0, 0] = 1
+        transform[0, 1] = 0
+        transform[1, 0] = 0
+        transform[1, 1] = 1
     I2_warped = cv2.warpAffine(img, transform, img.shape[0:2][::-1],cv2.INTER_LINEAR)
     I2_warped = np.reshape(I2_warped, img.shape)
     return I2_warped
@@ -296,8 +297,9 @@ def faster_lucas_kanade_step(I1: np.ndarray,
     Ix = signal.convolve2d(I2,X_DERIVATIVE_FILTER,mode='same',boundary='symm')
     Iy = signal.convolve2d(I2,Y_DERIVATIVE_FILTER,mode='same',boundary='symm')
     It = I2.astype('int16') - I1.astype('int16')
-    if I1.shape[0]<=(window_size*10) or I1.shape[1]<=(window_size*10):
-        return lucas_kanade_step(I1, I2, window_size)
+    # if I1.shape[0]<=(window_size*10) or I1.shape[1]<=(window_size*10):
+    if I1.shape[0] <= (window_size ) or I1.shape[1] <= (window_size ):
+            return lucas_kanade_step(I1, I2, window_size)
     else:
         I2_temp=np.uint8(I2)
         corners = cv2.goodFeaturesToTrack(I2_temp, maxCorners=200, qualityLevel=0.01, minDistance=10, blockSize=window_size)
@@ -531,7 +533,7 @@ def lucas_kanade_faster_video_stabilization(
 
 
     # The larger the more stable the video, but less reactive to sudden panning
-    SMOOTHING_RADIUS = 50
+    SMOOTHING_RADIUS = 20
     def movingAverage(curve, radius):
         window_size = 2 * radius + 1
         # Define the filter
@@ -563,11 +565,34 @@ def lucas_kanade_faster_video_stabilization(
 
     # Calculate newer transformation array
     transforms_smooth = transforms + difference
+    prev_gray = cv2.cvtColor(frames_bgr[0], cv2.COLOR_BGR2GRAY)
+
+    transforms_homo = np.zeros((len(transforms) , 9), np.float32)
+    transforms_homo_list = np.zeros((len(transforms) , 3, 3), np.float32)
+
+    for  i in tqdm(range(len(transforms)), desc='Stabilizing Video Frames number'):
+
+        prev_pts = cv2.goodFeaturesToTrack(prev_gray,
+                                           maxCorners=200,
+                                           qualityLevel=0.01,
+                                           minDistance=30,
+                                           blockSize=WINDOW_SIZE_TAU)
+        curr_gray = cv2.cvtColor(frames_bgr[i], cv2.COLOR_BGR2GRAY)
+        curr_pts = prev_pts + np.array([transforms[i, 1], transforms[i, 0]])
+
+
+        # Find transformation matrix
+        transform_matrix, _ = cv2.findHomography(prev_pts, curr_pts)#todo: check
+        transforms_homo[i] = transform_matrix.flatten()
+        prev_gray = curr_gray
 
     for i, transform in enumerate(transforms):
         # Extract transformations from the new transformation array
         dx = transforms_smooth[i, 0]
         dy = transforms_smooth[i, 1]
+        # Extract transformations from the new transformation array
+        # dx = transforms[i, 0]
+        # dy = transforms[i, 1]
         # da = transforms_smooth[i, 2]
 
         # Reconstruct transformation matrix accordingly to new values
@@ -580,17 +605,23 @@ def lucas_kanade_faster_video_stabilization(
         m[1, 2] = dy
 
         # Apply affine wrapping to the given frame
-        frame_stabilized = cv2.warpAffine(frames_bgr[i], m, frames_bgr[i].shape[0:2][::-1], cv2.INTER_LINEAR)
+        # frame_stabilized = cv2.warpAffine(frames_bgr[i], m, frames_bgr[i].shape[0:2][::-1], cv2.INTER_CUBIC)
 
+        transform_matrix = transforms_homo[i].reshape((3, 3))
+        frame_stabilized = cv2.warpPerspective(frames_bgr[i], transform_matrix, frames_bgr[i].shape[0:2][::-1])
         # Fix border artifacts
         frame_stabilized = fixBorder(frame_stabilized)
 
         array_of_frame.append(frame_stabilized)
+        if not os.path.exists('../Temp/stabilized_frames/'):
+            os.makedirs('../Temp/stabilized_frames/')
+        cv2.imwrite(f'../Temp/stabilized_frames/frame_{i}.jpg', frame_stabilized)
+
 
     array_of_frame_to_avi_file(array_of_frame, output_video_path,cap_color.get(cv2.CAP_PROP_FPS))
     cap.release()
     out.release()
-    cap_color.release()
+    # cap_color.release()
     out_color.release()
     cv2.destroyAllWindows()
     return None
