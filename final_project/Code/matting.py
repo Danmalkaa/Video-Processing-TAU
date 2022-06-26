@@ -4,6 +4,8 @@ import numpy as np
 import logging
 import time
 import os
+import re
+
 from skimage.graph import MCP
 from constants import (
     EPSILON_NARROW_BAND,
@@ -29,7 +31,7 @@ def reaf_all_frame_from_folser(path_of_folder,typeofimg=".jpg"):
     frame_array = []
     #get array of all files name in the folder
     list_of_files = os.listdir(path_of_folder)
-    list_of_files.sort()
+    list_of_files.sort(key=lambda f: int(re.sub('\D', '', f)))
     for file in list_of_files:
 
         if file.endswith(typeofimg):
@@ -46,7 +48,7 @@ def video_matting(input_stabilize_video, binary_video_path, new_background):
     # Read input video
     frames_bgr = np.array(reaf_all_frame_from_folser('../Temp/stabilized_frames/'))
     w, h = frames_bgr[0].shape[0:2][::-1]
-    fps_stabilize = 30.0
+    fps_stabilize = 30.04
     # cap_stabilize, w, h, fps_stabilize = get_video_files(path=input_stabilize_video)
     cap_binary, _, _, fps_binary = get_video_files(path=binary_video_path)
 

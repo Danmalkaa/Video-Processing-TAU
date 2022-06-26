@@ -94,7 +94,7 @@ def reaf_all_frame_from_folser(path_of_folder,typeofimg=".jpg"):
     frame_array = []
     #get array of all files name in the folder
     list_of_files = os.listdir(path_of_folder)
-    list_of_files.sort()
+    list_of_files.sort(key=lambda f: int(re.sub('\D', '', f)))
     for file in list_of_files:
 
         if file.endswith(typeofimg):

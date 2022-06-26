@@ -4,8 +4,12 @@ from tqdm import tqdm
 import numpy as np
 import time
 from scipy.stats import gaussian_kde
+import os
+import re
+
 ID1 = 304773591
 ID2 = 313325938
+# TODO: change comm
 from constants import (
     BW_MEDIUM,
     SHOES_HEIGHT,
@@ -47,7 +51,7 @@ def choosIndicesForBackgroundAndForeground(mask, number_of_choices,b_or_f):
 
 
 def backgroundSubTractorKNNStudyingFrameshistory(frames_hsv,mask_list,backSub):
-    for j in tqdm( range(3), desc="BackgroundSubtractorKNN Studying Frames history"):
+    for j in tqdm( range(6), desc="BackgroundSubtractorKNN Studying Frames history"):
         for index_frame, frame in enumerate(frames_hsv):
             frame_sv = frame[:, :, 1:]
             fg_Mask = backSub.apply(frame_sv)
@@ -60,12 +64,12 @@ def collectingColorsBodyAndShoes(mask_list,frames_bgr,person_and_blue_mask_list,
     for frame_index, frame in enumerate(frames_bgr):
         blue_frame, _, _ = cv2.split(frame)
         mask_for_frame = mask_list[frame_index].astype(np.uint8)
-        mask_for_frame = cv2.morphologyEx(mask_for_frame, cv2.MORPH_CLOSE, disk_kernel(6))#todo: check morphologyEx
-        mask_for_frame = cv2.medianBlur(mask_for_frame, 7)#todo: check medianBlur
+        mask_for_frame = cv2.morphologyEx(mask_for_frame, cv2.MORPH_CLOSE, disk_kernel(6))
+        mask_for_frame = cv2.medianBlur(mask_for_frame, 7)
         contours, _ = cv2.findContours(mask_for_frame, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         contours.sort(key=cv2.contourArea, reverse=True)
         person_mask = np.zeros(mask_for_frame.shape)
-        cv2.fillPoly(person_mask, pts=[contours[0]], color=1)#todo: check fillPoly
+        cv2.fillPoly(person_mask, pts=[contours[0]], color=1)
         blue_mask = (blue_frame < BLUE_MASK_THR).astype(np.uint8)
         person_and_blue_mask = (person_mask * blue_mask).astype(np.uint8)
         omega_f_indices = choosIndicesForBackgroundAndForeground(person_and_blue_mask, NUM_PIXEL,1)
@@ -90,6 +94,7 @@ def collectingColorsBodyAndShoes(mask_list,frames_bgr,person_and_blue_mask_list,
             omega_b_shoes_colors = np.concatenate(
                 (omega_b_shoes_colors, frame[omega_b_shoes_indices[:, 0], omega_b_shoes_indices[:, 1], :]))
     return (mask_list,frames_bgr,person_and_blue_mask_list,omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors)
+
 def FilteringKDEs(omega_f_colors,omega_b_colors,omega_f_shoes_colors,omega_b_shoes_colors,n_frames,h, w,frames_bgr,person_and_blue_mask_list):
     foreground_pdf = new_estimate_pdf(omega_values=omega_f_colors, bw_method=BW_MEDIUM)
     background_pdf = new_estimate_pdf(omega_values=omega_b_colors, bw_method=BW_MEDIUM)
@@ -257,14 +262,43 @@ def finalprossec(omega_f_face_colors,omega_b_face_colors,frames_bgr,or_mask_list
         final_masks_list.append(scale_matrix_0_to_255(final_mask))
         final_frames_list.append(apply_mask_on_color_frame(frame=frame, mask=final_mask))
     return final_masks_list, final_frames_list
+
+def reaf_all_frame_from_folser(path_of_folder,typeofimg=".jpg"):
+    frame_array = []
+    #get array of all files name in the folder
+    list_of_files = os.listdir(path_of_folder)
+    list_of_files.sort(key=lambda f: int(re.sub('\D', '', f)))
+    for file in list_of_files:
+
+        if file.endswith(typeofimg):
+            frame = cv2.imread(os.path.join(path_of_folder, file))
+            frame_array.append(frame)
+    return frame_array
+
 def background_subtraction(input_video_path, output_video_path="../Temp/extracted_{0}_{0}.avi".format(ID1,ID2)):
     start_time= time.time()
     # Read input video
-    cap, w, h, fps = get_video_files(path=input_video_path)
+    # cap, w, h, fps = get_video_files(path=input_video_path)
+    # Read input video
+    frames_bgr = np.array(reaf_all_frame_from_folser('../Temp/stabilized_frames/'))
+    w, h = frames_bgr[0].shape[0:2][::-1]
+    fps = 30.04
+    # cap_stabilize, w, h, fps_stabilize = get_video_files(path=input_stabilize_video)
+
     # Get frame count
-    frames_bgr = load_entire_video(cap, color_space='bgr')
-    frames_hsv = load_entire_video(cap, color_space='hsv')
-    n_frames = len(frames_bgr)
+    n_frames = frames_bgr.shape[0]
+    # n_frames = int(cap_stabilize.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    # frames_bgr = load_entire_video(cap_stabilize, color_space='bgr')
+    frames_hsv = []
+    for curr in frames_bgr:
+        frame_hsv = cv2.cvtColor(curr, cv2.COLOR_BGR2HSV)
+        frames_hsv.append(frame_hsv)
+    frames_hsv = np.array(frames_hsv)
+    # Get frame count
+    # frames_bgr = load_entire_video(cap, color_space='bgr')
+    # frames_hsv = load_entire_video(cap, color_space='hsv')
+    # n_frames = len(frames_bgr)
     backSub = cv2.createBackgroundSubtractorKNN(detectShadows=False, history=3 * n_frames)
     mask_list = np.zeros((n_frames, h, w)).astype(np.uint8)
     print(f"[BS] - BackgroundSubtractorKNN Studying Frames history")
@@ -307,8 +341,10 @@ def background_subtraction(input_video_path, output_video_path="../Temp/extracte
     print('~~~~~~~~~~~ extracted.avi has been created! ~~~~~~~~~~~')
     print("the time of all is:" + str(time.time() - start_time))
 
-    release_video_files(cap)
+    # release_video_files(cap)
 def main():
-    background_subtraction("../Temp/stabilized_{0}_{0}.avi".format(ID1,ID2))
+    # background_subtraction("../Temp/stabilized_{0}_{0}.avi".format(ID1,ID2))
+    background_subtraction('../Temp/304773591_313325938_faster_stabilized_video.avi')
+
 if __name__ == '__main__':
     main()
