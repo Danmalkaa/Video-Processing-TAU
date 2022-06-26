@@ -10,7 +10,8 @@ python-dateutil==2.8.2
 scipy~=1.8.0
 six==1.16.0
 toml==0.10.2
-tqdm~=4.63.1
-numpy==1.21.1
-
-opencv-python=4.5.2
+tqdm~=4.64.0
+numpy==1.22.3
+geodistk==0.1.7
+opencv-python==4.5.2
+scikit-image==0.19.2
